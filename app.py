@@ -4,7 +4,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import openpyxl
 from datetime import datetime
-import statistics
 import requests
 import io
 
@@ -267,8 +266,7 @@ def load_wsd():
 @st.cache_data
 def load_imhs():
     wb = fetch_wb(IMHS_URL)
-    latest_sheet = "Pricing 3.30.26-5.31.26"
-    ws = wb[latest_sheet]
+    ws = wb["Pricing 3.30.26-5.31.26"]
     rows = list(ws.iter_rows(values_only=True))
     non_peak, peak, section = {}, {}, None
     for row in rows:
@@ -278,257 +276,147 @@ def load_imhs():
         elif label == "Holiday/Peak Pricing":
             section = "peak"
         elif label in DAY_ORDER and section:
-            d = {"Select 3hr": row[3], "Select All-Day": row[4], "Premier 3hr": row[5], "Premier All-Day": row[6]}
+            d = {"Select 3hr": row[3], "Select All-Day": row[4],
+                 "Premier 3hr": row[5], "Premier All-Day": row[6]}
             (non_peak if section == "non_peak" else peak)[label] = d
 
-    def _try_parse_start(sname):
-        """Best-effort: extract a start Timestamp from a sheet name. Returns pd.NaT if unparseable."""
-        n = sname.strip()
-        if n.lower().startswith("pricing "):
-            n = n[8:].strip()
-        start_part = n.replace(" ", "").split("-")[0]
-        parts = start_part.split(".")
-        if len(parts) != 3:
-            return pd.NaT
-        try:
-            mo, da, yr = int(parts[0]), int(parts[1]), int(parts[2])
-            if yr < 100:
-                yr += 2000
-            if not (1 <= mo <= 12 and 1 <= da <= 31 and 2015 <= yr <= 2035):
-                return pd.NaT
-            return pd.Timestamp(f"{yr}-{mo:02d}-{da:02d}")
-        except Exception:
-            return pd.NaT
+    # ── Hardcoded price history (1/23/23 – 5/31/26) ───────────────────────────
+    # Each entry: (period_label, date_str, non_peak_map, peak_map)
+    # Day map values: (Select 3hr, Select All-Day, Premier 3hr, Premier All-Day)
+    # None = product didn't exist in that period
+    _NP = "Non-Peak"
+    _PK = "Peak"
 
-    # Identify pricing sheets by name (skip known non-pricing sheets).
-    # Use column-agnostic content parsing: find section markers in ANY column,
-    # then read the 4 data values immediately to the right of the day label.
-    NON_PRICING = {"2015 - Present DAy", "breif discritpion of pricing",
-                   "brief discritpion of pricing", "brief description of pricing"}
+    HIST_PERIODS = [
+        # 1/23/23–4/30/23: single unified ticket (≈ Premier access), no Select/Peak split
+        ("1.23.23", "1.23.2023",
+         {"Mon":(None,None,40,100),"Tue":(None,None,40,100),"Wed":(None,None,40,100),
+          "Thu":(None,None,40,100),"Fri":(None,None,44,None),
+          "Sat":(None,None,48,125),"Sun":(None,None,48,125)},
+         None),
 
-    DAY_SET = set(DAY_ORDER)
-    NP_MARKERS = {"non-peak pricing", "non peak pricing"}
-    PK_MARKERS = {"holiday/peak pricing", "peak pricing", "holiday pricing",
-                  "peak/holiday pricing", "holiday / peak pricing"}
+        # 5/1/23–9/4/23: GA (Select) + WS (Premier) introduced, no Peak
+        ("5.1.23", "5.1.2023",
+         {"Mon":(39,None,49,100),"Tue":(39,None,49,100),"Wed":(39,None,49,100),
+          "Thu":(39,None,49,100),"Fri":(44,None,54,150),
+          "Sat":(48,None,58,150),"Sun":(48,None,58,150)},
+         None),
 
-    def _to_num(v):
-        """Convert cell value to float — handles int, float, or text like '$50'."""
-        if isinstance(v, (int, float)):
-            return float(v)
-        try:
-            return float(str(v).replace("$", "").replace(",", "").strip())
-        except Exception:
-            return None
+        # 9/5/23–10/31/23
+        ("9.5.23", "9.5.2023",
+         {"Mon":(40,None,50,100),"Tue":(40,None,50,100),"Wed":(40,None,50,100),
+          "Thu":(40,None,50,100),"Fri":(48,None,58,150),
+          "Sat":(48,None,58,150),"Sun":(48,None,58,150)},
+         None),
 
-    # Old-format side-by-side headers
-    NP_HEADERS = {"regular week", "regular pricing", "non-peak week", "non peak week"}
-    PK_HEADERS = {"holiday week", "peak week", "holiday / peak week", "holiday/peak week",
-                  "holiday & peak week", "peak / holiday week"}
+        # 11/1/23–12/21/23
+        ("11.1.23", "11.1.2023",
+         {"Mon":(40,None,50,100),"Tue":(40,None,50,100),"Wed":(40,None,50,100),
+          "Thu":(40,None,50,100),"Fri":(48,None,58,150),
+          "Sat":(48,None,58,150),"Sun":(48,None,58,150)},
+         None),
 
-    def _extract_all_days(ws_h):
-        """Handle three layouts:
-        - TIMESLOT: oldest (2022-2024) — 'Monday - Thursday'/'Friday'/'Saturday & Sunday'
-          as column headers, rows are check-in time slots (datetime.time objects)
-        - OLD side-by-side: 'Regular Week' / 'Holiday Week' column-group headers
-        - NEW vertical: 'Non-Peak Pricing' / 'Holiday/Peak Pricing' stacked down col C
-        """
-        np_days, pk_days = {}, {}
-        debug_rows = []
-        all_rows = list(ws_h.iter_rows(values_only=True))
+        # 12/22/23–5/23/24: +$4 GA / +$9 WS; Peak pricing introduced
+        ("12.22.23", "12.22.2023",
+         {"Mon":(40,None,59,100),"Tue":(40,None,59,100),"Wed":(40,None,59,100),
+          "Thu":(40,None,59,100),"Fri":(52,None,67,150),
+          "Sat":(52,None,67,150),"Sun":(52,None,67,150)},
+         {"Mon":(52,None,67,150),"Tue":(52,None,67,150),"Wed":(52,None,67,150),
+          "Thu":(52,None,67,150),"Fri":(52,None,67,150),
+          "Sat":(52,None,67,150),"Sun":(52,None,67,150)}),
 
-        # ── Detect TIMESLOT format ────────────────────────────────────────────
-        MON_THU_HDRS = {"monday - thursday", "monday-thursday", "monday–thursday"}
-        FRI_HDRS_OLD = {"friday"}
-        SAT_SUN_HDRS = {"saturday & sunday", "saturday and sunday", "sat & sun"}
+        # 5/24/24–11/3/24
+        ("5.24.24", "5.24.2024",
+         {"Mon":(40,None,59,100),"Tue":(40,None,59,100),"Wed":(40,None,59,100),
+          "Thu":(40,None,59,100),"Fri":(52,None,67,150),
+          "Sat":(52,None,67,150),"Sun":(52,None,67,150)},
+         {"Mon":(52,None,67,150),"Tue":(52,None,67,150),"Wed":(52,None,67,150),
+          "Thu":(52,None,67,150),"Fri":(52,None,67,150),
+          "Sat":(52,None,67,150),"Sun":(52,None,67,150)}),
 
-        mth_col = fri_col = sat_col = None
-        for row in all_rows[:40]:
-            for ci, val in enumerate(row):
-                sv = str(val).strip().lower() if val is not None else ""
-                if sv in MON_THU_HDRS:
-                    mth_col = ci
-                if sv in FRI_HDRS_OLD and mth_col is not None and fri_col is None:
-                    fri_col = ci
-                if sv in SAT_SUN_HDRS and mth_col is not None and sat_col is None:
-                    sat_col = ci
+        # 11/4/24–2/28/25
+        ("11.4.24", "11.4.2024",
+         {"Mon":(44,None,59,100),"Tue":(44,None,59,100),"Wed":(44,None,59,100),
+          "Thu":(44,None,59,100),"Fri":(52,None,67,150),
+          "Sat":(52,None,67,150),"Sun":(52,None,67,150)},
+         {"Mon":(52,None,67,150),"Tue":(52,None,67,150),"Wed":(52,None,67,150),
+          "Thu":(52,None,67,150),"Fri":(52,None,67,150),
+          "Sat":(52,None,67,150),"Sun":(52,None,67,150)}),
 
-        if mth_col is not None:
-            debug_rows.append(f"TIMESLOT-format: Mon-Thu col={mth_col}, Fri col={fri_col}, Sat col={sat_col}")
-            mth_prices, fri_prices, sat_prices = [], [], []
-            for row in all_rows:
-                # Timeslot data rows have a datetime.time value in the first few columns
-                has_time = any(
-                    hasattr(row[i], "hour")
-                    for i in range(min(5, len(row)))
-                    if row[i] is not None
-                )
-                if not has_time:
-                    continue
-                if mth_col < len(row):
-                    v = _to_num(row[mth_col])
-                    if v is not None: mth_prices.append(v)
-                if fri_col is not None and fri_col < len(row):
-                    v = _to_num(row[fri_col])
-                    if v is not None: fri_prices.append(v)
-                if sat_col is not None and sat_col < len(row):
-                    v = _to_num(row[sat_col])
-                    if v is not None: sat_prices.append(v)
+        # 3/1/25–6/30/25: timeslot-era pricing (GA/WS), no Peak
+        ("3.1.25", "3.1.2025",
+         {"Mon":(46,None,63,100),"Tue":(46,None,63,100),"Wed":(46,None,63,100),
+          "Thu":(46,None,63,100),"Fri":(48,None,65,150),
+          "Sat":(48,None,65,150),"Sun":(52,None,69,150)},
+         None),
 
-            mth_p = round(statistics.median(mth_prices), 2) if mth_prices else None
-            fri_p = round(statistics.median(fri_prices), 2) if fri_prices else None
-            sat_p = round(statistics.median(sat_prices), 2) if sat_prices else None
-            debug_rows.append(f"  samples mth={mth_prices[:4]} → {mth_p}")
-            debug_rows.append(f"  samples fri={fri_prices[:4]} → {fri_p}")
-            debug_rows.append(f"  samples sat={sat_prices[:4]} → {sat_p}")
+        # 7/1/25–8/30/25: same as above
+        ("7.1.25", "7.1.2025",
+         {"Mon":(46,None,63,100),"Tue":(46,None,63,100),"Wed":(46,None,63,100),
+          "Thu":(46,None,63,100),"Fri":(48,None,65,150),
+          "Sat":(48,None,65,150),"Sun":(52,None,69,150)},
+         None),
 
-            # Old sheets have no Select/Premier split — store under Select 3hr only
-            day_map = {
-                "Mon": mth_p, "Tue": mth_p, "Wed": mth_p, "Thu": mth_p,
-                "Fri": fri_p, "Sat": sat_p, "Sun": sat_p,
-            }
-            for day, price in day_map.items():
-                if price is not None:
-                    np_days[day] = {"Select 3hr": price, "Select All-Day": None,
-                                    "Premier 3hr": None, "Premier All-Day": None}
-            return np_days, pk_days, debug_rows
+        # 9/1/25–9/30/25: new structured format — Select All-Day introduced
+        ("9.1.25", "9.1.2025",
+         {"Mon":(48,53,68,78),"Tue":(48,53,68,78),"Wed":(48,53,68,78),
+          "Thu":(48,53,68,78),"Fri":(48,58,68,83),
+          "Sat":(56,76,76,116),"Sun":(56,66,76,91)},
+         {"Mon":(56,76,76,116)}),  # Labor Day only
 
-        # ── Detect OLD side-by-side format ────────────────────────────────────
-        np_lc = pk_lc = None
-        for row in all_rows[:20]:
-            for ci, val in enumerate(row):
-                sv = str(val).strip().lower() if val is not None else ""
-                if sv in NP_HEADERS and np_lc is None:
-                    np_lc = ci
-                    debug_rows.append(f"OLD-format NP header '{val}' at col {ci}")
-                elif sv in PK_HEADERS and pk_lc is None:
-                    pk_lc = ci
-                    debug_rows.append(f"OLD-format PK header '{val}' at col {ci}")
-            if np_lc is not None or pk_lc is not None:
-                break
+        # 10/1/25–2/1/26
+        ("10.1.25", "10.1.2025",
+         {"Mon":(48,53,68,78),"Tue":(48,53,68,78),"Wed":(48,53,68,78),
+          "Thu":(48,53,68,78),"Fri":(48,58,68,83),
+          "Sat":(56,76,76,116),"Sun":(56,66,76,91)},
+         {"Mon":(56,96,76,136),"Tue":(56,96,76,136),"Wed":(56,96,76,136),
+          "Thu":(56,96,76,136),"Fri":(56,96,76,136),
+          "Sat":(56,96,76,136),"Sun":(56,96,76,136)}),
 
-        if np_lc is not None or pk_lc is not None:
-            for row in all_rows:
-                for lc, dest, label in [(np_lc, np_days, "NP"), (pk_lc, pk_days, "PK")]:
-                    if lc is None or lc >= len(row):
-                        continue
-                    day = row[lc]
-                    if day not in DAY_SET:
-                        continue
-                    try:
-                        v1 = _to_num(row[lc + 1])
-                        v2 = _to_num(row[lc + 2])
-                        v3 = _to_num(row[lc + 3])
-                        v4 = _to_num(row[lc + 4])
-                        if v1 is not None and day not in dest:
-                            dest[day] = {"Select 3hr": v1, "Select All-Day": v2,
-                                         "Premier 3hr": v3, "Premier All-Day": v4}
-                            debug_rows.append(f"{label} {day}: {v1},{v2},{v3},{v4}")
-                    except Exception as e:
-                        debug_rows.append(f"{label} {day} error: {e}")
-        else:
-            # ── NEW vertical format ───────────────────────────────────────────
-            sec = None
-            for row in all_rows:
-                found_marker = False
-                for val in row:
-                    sv = str(val).strip().lower() if val is not None else ""
-                    if sv in NP_MARKERS:
-                        sec = "non_peak"; found_marker = True
-                        debug_rows.append(f"NEW-format NP marker: {list(row[:8])}")
-                        break
-                    elif sv in PK_MARKERS:
-                        sec = "peak"; found_marker = True
-                        debug_rows.append(f"NEW-format PK marker: {list(row[:8])}")
-                        break
-                if found_marker or sec is None:
-                    continue
-                for ci, val in enumerate(row):
-                    if val in DAY_SET:
-                        try:
-                            v1 = _to_num(row[ci + 1])
-                            v2 = _to_num(row[ci + 2])
-                            v3 = _to_num(row[ci + 3])
-                            v4 = _to_num(row[ci + 4])
-                            if v1 is not None:
-                                entry = {"Select 3hr": v1, "Select All-Day": v2,
-                                         "Premier 3hr": v3, "Premier All-Day": v4}
-                                if sec == "non_peak" and val not in np_days:
-                                    np_days[val] = entry
-                                elif sec == "peak" and val not in pk_days:
-                                    pk_days[val] = entry
-                        except Exception:
-                            pass
-                        break
+        # 2/2/26–3/29/26 (standard pricing)
+        ("2.2.26", "2.2.2026",
+         {"Mon":(48,53,68,78),"Tue":(48,53,68,78),"Wed":(48,53,68,78),
+          "Thu":(48,53,68,78),"Fri":(48,58,68,83),
+          "Sat":(56,76,76,150),"Sun":(56,66,76,130)},
+         {"Mon":(60,75,95,150),"Tue":(60,75,95,150),"Wed":(60,75,95,150),
+          "Thu":(60,75,95,150),"Fri":(60,75,95,150),
+          "Sat":(60,75,95,150),"Sun":(60,75,95,150)}),
 
-        return np_days, pk_days, debug_rows
+        # 3/2/26: Summit week (special pricing within 2/2/26–3/29/26)
+        ("3.2.26", "3.2.2026",
+         {"Mon":(50,55,75,80),"Tue":(50,55,75,80),"Wed":(50,55,75,80),
+          "Thu":(50,55,75,80),"Fri":(50,60,80,90),
+          "Sat":(60,75,95,150),"Sun":(55,65,85,130)},
+         {"Mon":(60,75,95,150),"Tue":(60,75,95,150),"Wed":(60,75,95,150),
+          "Thu":(60,75,95,150),"Fri":(60,75,95,150),
+          "Sat":(60,75,95,150),"Sun":(60,75,95,150)}),
 
-    pricing_sheets_ordered = []
-    for idx, sname in enumerate(wb.sheetnames):
-        if sname.strip().lower() in {s.lower() for s in NON_PRICING}:
-            continue
-        ts = _try_parse_start(sname)
-        if ts is pd.NaT:
-            continue
-        pricing_sheets_ordered.append((ts, idx, sname))
-    pricing_sheets_ordered.sort(key=lambda x: x[0])
+        # 3/30/26–5/31/26
+        ("3.30.26", "3.30.2026",
+         {"Mon":(50,55,75,80),"Tue":(50,55,75,80),"Wed":(50,55,75,80),
+          "Thu":(50,55,75,80),"Fri":(50,60,80,90),
+          "Sat":(60,75,95,150),"Sun":(55,65,85,130)},
+         {"Mon":(60,75,95,150),"Tue":(60,75,95,150),"Wed":(60,75,95,150),
+          "Thu":(60,75,95,150),"Fri":(60,75,95,150),
+          "Sat":(60,75,95,150),"Sun":(60,75,95,150)}),
+    ]
 
     hist_records = []
-    sheet_debug = {}
-    for ts, idx, sname in pricing_sheets_ordered:
-        mo, da, yr = ts.month, ts.day, ts.year
-        label    = f"{mo}.{da}.{str(yr)[2:]}"
-        date_str = f"{mo}.{da}.{yr}"
-        np_days, pk_days, dbg = _extract_all_days(wb[sname])
-        sheet_debug[sname] = {"np": len(np_days), "pk": len(pk_days), "log": dbg[:10]}
-        for day in DAY_ORDER:
-            if day in np_days:
-                hist_records.append({"Period": label, "Date": date_str,
-                                     "Type": "Non-Peak", "Day": day, **np_days[day]})
-            if day in pk_days:
-                hist_records.append({"Period": label, "Date": date_str,
-                                     "Type": "Peak", "Day": day, **pk_days[day]})
+    for label, date_str, np_map, pk_map in HIST_PERIODS:
+        for type_, dmap in [(_NP, np_map), (_PK, pk_map)]:
+            if not dmap:
+                continue
+            for day in DAY_ORDER:
+                if day not in dmap:
+                    continue
+                s3, sad, p3, pad = dmap[day]
+                hist_records.append({
+                    "Period": label, "Date": date_str, "Type": type_, "Day": day,
+                    "Select 3hr": s3, "Select All-Day": sad,
+                    "Premier 3hr": p3, "Premier All-Day": pad,
+                })
 
-    ws_yoy = wb["2015 - Present DAy"]
-    adult_peak_row = None
-    for row in ws_yoy.iter_rows(values_only=True):
-        if row[0] == "Everyday Adult" and adult_peak_row is None:
-            adult_peak_row = row
-            break
-    if adult_peak_row:
-        for i, yr in enumerate(["2015","2016","2017","2018","2019","2020","2021"]):
-            val = adult_peak_row[i + 1]
-            if val is not None:
-                hist_records.append({"Period": yr, "Date": f"6.1.{yr}", "Type": "Peak (Legacy Adult)",
-                    "Select 3hr": val, "Select All-Day": val, "Premier 3hr": None, "Premier All-Day": None})
-
-    # Build debug report
-    periods_found = sorted(set(r["Period"] for r in hist_records if r["Type"] == "Non-Peak"))
-    debug_lines = [
-        f"**Pricing sheets found:** {len(pricing_sheets_ordered)}",
-        f"**Non-Peak records:** {sum(1 for r in hist_records if r['Type']=='Non-Peak')}",
-        f"**Peak records:** {sum(1 for r in hist_records if r['Type']=='Peak')}",
-        f"**Periods:** {periods_found}",
-        "", "**Per-sheet extraction log:**"
-    ]
-    for sname, info in sheet_debug.items():
-        debug_lines.append(f"\n**`{sname}`** — NP days={info['np']}, PK days={info['pk']}")
-        for line in info["log"]:
-            debug_lines.append(f"  `{line}`")
-
-    # Add raw rows from oldest sheet for diagnosis
-    if pricing_sheets_ordered:
-        oldest_sname = pricing_sheets_ordered[0][2]
-        debug_lines.append(f"\n**Raw rows from oldest sheet `{oldest_sname}` (first 40 non-empty):**")
-        count = 0
-        for row in wb[oldest_sname].iter_rows(values_only=True):
-            non_none = [v for v in row if v is not None]
-            if non_none:
-                debug_lines.append(f"`{list(row[:10])}`")
-                count += 1
-            if count >= 40:
-                break
-
-    return non_peak, peak, pd.DataFrame(hist_records), "\n".join(debug_lines)
+    return non_peak, peak, pd.DataFrame(hist_records)
 
 
 @st.cache_data
@@ -647,7 +535,7 @@ def base_chart():
 # ══════════════════════════════════════════════════════════════════════════════
 if "Overview" in page:
     wsd_current, _, _ = load_wsd()
-    imhs_non_peak, imhs_peak, _, _dbg = load_imhs()
+    imhs_non_peak, imhs_peak, _ = load_imhs()
     zchs_current, _ = load_zchs()
 
     st.markdown("""
@@ -920,15 +808,12 @@ elif "WSD" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 elif "IMHS" in page:
     inject_page_bg("IMHS")
-    imhs_non_peak, imhs_peak, imhs_hist, _imhs_debug = load_imhs()
+    imhs_non_peak, imhs_peak, imhs_hist = load_imhs()
     p = C["IMHS"]["p"]; light = C["IMHS"]["light"]
 
     banner("Iron Mountain Hot Springs", "IMHS — Glenwood Springs, CO  ·  Current Pricing", "IMHS", "🏔️")
 
-    with st.expander("🔍 Debug: Sheet Detection (remove after fix)"):
-        st.markdown(_imhs_debug)
-
-    tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History (2015–Present)  "])
+    tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History (2023–Present)  "])
 
     with tab1:
         col1, col2 = st.columns(2)
