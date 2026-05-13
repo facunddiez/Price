@@ -23,6 +23,29 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# ── password gate ─────────────────────────────────────────────────────────────
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.markdown("""
+    <div style='max-width:360px;margin:120px auto 0;text-align:center'>
+        <div style='font-size:40px;margin-bottom:12px'>♨️</div>
+        <div style='font-size:24px;font-weight:700;color:#F8FAFC;margin-bottom:4px'>Worldsprings</div>
+        <div style='font-size:13px;color:#64748B;margin-bottom:32px'>Pricing Dashboard</div>
+    </div>
+    """, unsafe_allow_html=True)
+    col_l, col_m, col_r = st.columns([1, 1.2, 1])
+    with col_m:
+        pwd = st.text_input("Password", type="password", placeholder="Enter password")
+        if st.button("Enter", use_container_width=True):
+            if pwd == st.secrets["password"]:
+                st.session_state.authenticated = True
+                st.rerun()
+            else:
+                st.error("Incorrect password")
+    st.stop()
+
 # ── color palette ─────────────────────────────────────────────────────────────
 C = {
     "WSD":  {"p": "#38BDF8", "light": "#BAE6FD", "dark": "#0369A1", "bg": "#051525", "glow": "#38BDF820"},
