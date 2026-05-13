@@ -361,7 +361,7 @@ def load_zchs():
                 current["Full Day Premier (21+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
 
     pricing_sheets = {
-        "Jan 2025": ("Pricing 2_3_2025", "1.22.2025"),
+        "Feb 2025": ("Pricing 2_3_2025", "2.3.2025"),
         "Jul 2025": ("Pricing 07_2025",  "7.1.2025"),
         "Nov 2025": ("Pricing 11_2025",  "11.1.2025"),
     }
@@ -865,7 +865,7 @@ elif "ZCHS" in page:
 
         if not zchs_hist.empty:
             date_map = {
-                "Jan 2025": pd.Timestamp("2025-01-22"),
+                "Feb 2025": pd.Timestamp("2025-02-03"),
                 "Jul 2025": pd.Timestamp("2025-07-01"),
                 "Nov 2025": pd.Timestamp("2025-11-01"),
             }
@@ -881,7 +881,7 @@ elif "ZCHS" in page:
 
             key_products = ["Quick Dip Select (13+)", "3hr Select (13+)", "Full Day Select (13+)"]
             prod_colors  = [C["ZCHS"]["light"], p, C["ZCHS"]["dark"]]
-            periods_order = ["Jan 2025", "Jul 2025", "Nov 2025", "May 2026"]
+            periods_order = ["Feb 2025", "Jul 2025", "Nov 2025", "May 2026"]
 
             day_type = st.radio("Price type", ["Mon-Thu", "Fri/Sat/Sun"], horizontal=True)
 
