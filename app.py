@@ -501,7 +501,7 @@ if "Overview" in page:
         </div>""", unsafe_allow_html=True)
         if zchs_current:
             disp = {pr: {k: v if isinstance(v,(int,float)) else "—" for k,v in prc.items()} for pr,prc in zchs_current.items()}
-            price_table(disp, "Soak Pricing (Nov 2025)", "ZCHS")
+            price_table(disp, "Soak Pricing (May 2026)", "ZCHS")
         simple_table([("Anytime Annual","$1,499"),("Weekday Annual","$920"),("Snowbird (3 mo)","$499")], "Memberships", "ZCHS")
         simple_table([("Single Cabana Mon-Thu","$149"),("Single Cabana Fri-Sun","$249"),
                       ("Double Cabana Mon-Thu","$199"),("Double Cabana Fri-Sun","$299")], "Add-ons", "ZCHS")
@@ -808,7 +808,7 @@ elif "ZCHS" in page:
     zchs_current, zchs_hist = load_zchs()
     p = C["ZCHS"]["p"]; light = C["ZCHS"]["light"]
 
-    banner("Zion Canyon Hot Springs", "ZCHS — Zion Canyon, UT  ·  Nov 2025 Pricing", "ZCHS", "🏜️")
+    banner("Zion Canyon Hot Springs", "ZCHS — Zion Canyon, UT  ·  May 2026 Pricing", "ZCHS", "🏜️")
 
     tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History  "])
 
@@ -817,7 +817,7 @@ elif "ZCHS" in page:
         with col1:
             if zchs_current:
                 disp = {pr: {k: v if isinstance(v,(int,float)) else "—" for k,v in prc.items()} for pr,prc in zchs_current.items()}
-                price_table(disp, "Soak Pricing (Nov 2025)", "ZCHS")
+                price_table(disp, "Soak Pricing (May 2026)", "ZCHS")
         with col2:
             simple_table([("Anytime Annual","$1,499"),("Weekday Annual (M-F)","$920"),("Snowbird (3 months)","$499")], "Memberships", "ZCHS")
             simple_table([("Robe","$10"),("Single Cabana Mon-Thu","$149"),("Single Cabana Fri-Sun","$249"),
@@ -828,7 +828,7 @@ elif "ZCHS" in page:
                       ("Premier (21+)","All pools including 21+ only areas")], "Access Tiers", "ZCHS")
 
     with tab2:
-        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day Type — ZCHS (Nov 2025)</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day Type — ZCHS (May 2026)</div>", unsafe_allow_html=True)
 
         if zchs_current:
             products  = list(zchs_current.keys())
