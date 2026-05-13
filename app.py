@@ -413,6 +413,19 @@ def load_imhs():
         for line in info["log"]:
             debug_lines.append(f"  `{line}`")
 
+    # Add raw rows from oldest sheet for diagnosis
+    if pricing_sheets_ordered:
+        oldest_sname = pricing_sheets_ordered[0][2]
+        debug_lines.append(f"\n**Raw rows from oldest sheet `{oldest_sname}` (first 40 non-empty):**")
+        count = 0
+        for row in wb[oldest_sname].iter_rows(values_only=True):
+            non_none = [v for v in row if v is not None]
+            if non_none:
+                debug_lines.append(f"`{list(row[:10])}`")
+                count += 1
+            if count >= 40:
+                break
+
     return non_peak, peak, pd.DataFrame(hist_records), "\n".join(debug_lines)
 
 
