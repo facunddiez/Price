@@ -792,42 +792,46 @@ elif "IMHS" in page:
                 except Exception:
                     return pd.NaT
 
-            metrics_imhs  = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
-            colors_imhs4  = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
-
-            # Work with Non-Peak Mon and Peak Sat (skip legacy)
-            np_hist = imhs_hist[imhs_hist["Type"] == "Non-Peak Mon"].copy()
-            pk_hist = imhs_hist[imhs_hist["Type"] == "Peak Sat"].copy()
-            for df in (np_hist, pk_hist):
-                df["Date_ts"] = df["Date"].apply(_parse_dt)
-
-            # Extend last period to end date (5.31.2026)
+            metrics_imhs = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
+            colors_imhs4 = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
             end_ts = pd.Timestamp("2026-05-31")
-            for df in (np_hist, pk_hist):
-                last = df.loc[df["Date_ts"].idxmax()].copy()
-                last["Period"] = "5.31.26"; last["Date_ts"] = end_ts
-                df_ext = pd.DataFrame([last])
-                df.update(df)  # no-op, just to keep ref
-            np_ext = pd.concat([np_hist, pd.DataFrame([
-                {**np_hist.loc[np_hist["Date_ts"].idxmax()].to_dict(), "Period": "5.31.26", "Date_ts": end_ts}
-            ])], ignore_index=True)
-            pk_ext = pd.concat([pk_hist, pd.DataFrame([
-                {**pk_hist.loc[pk_hist["Date_ts"].idxmax()].to_dict(), "Period": "5.31.26", "Date_ts": end_ts}
-            ])], ignore_index=True)
+
+            # Build dated dataframes for each day type
+            def _make_dated(type_name):
+                df = imhs_hist[imhs_hist["Type"] == type_name].copy()
+                df["Date_ts"] = df["Date"].apply(_parse_dt)
+                df = df.dropna(subset=["Date_ts"]).sort_values("Date_ts").reset_index(drop=True)
+                if df.empty:
+                    return df
+                last = df.iloc[-1].copy()
+                last["Period"] = "5.31.26"
+                last["Date_ts"] = end_ts
+                return pd.concat([df, pd.DataFrame([last])], ignore_index=True)
+
+            np_ext = _make_dated("Non-Peak Mon")
+            pk_ext = _make_dated("Peak Sat")
 
             st.markdown("""<style>
             div[data-testid="stRadio"] label {color:#FFFFFF !important; font-weight:600}
             div[data-testid="stRadio"] label p {color:#FFFFFF !important}
             </style>""", unsafe_allow_html=True)
-            day_sel = st.radio("Day type", ["Non-Peak Mon", "Peak Sat"], horizontal=True)
-            df_trend = np_ext if day_sel == "Non-Peak Mon" else pk_ext
-            df_trend = df_trend.sort_values("Date_ts")
+
+            col_left, col_right = st.columns([1, 2])
+            with col_left:
+                day_sel = st.radio("Day type", ["Non-Peak Mon", "Peak Sat"], horizontal=True)
+            with col_right:
+                prod_sel = st.multiselect("Products", metrics_imhs, default=metrics_imhs)
+
+            df_trend = (np_ext if day_sel == "Non-Peak Mon" else pk_ext).copy()
 
             # ── Trendline ─────────────────────────────────────────────────────
             fig_trend = go.Figure()
             for metric, col in zip(metrics_imhs, colors_imhs4):
+                if metric not in prod_sel:
+                    continue
                 df_m = df_trend.dropna(subset=[metric])
-                if df_m.empty: continue
+                if df_m.empty:
+                    continue
                 fig_trend.add_trace(go.Scatter(
                     x=df_m["Date_ts"], y=df_m[metric],
                     name=metric, mode="lines+markers",
@@ -847,18 +851,18 @@ elif "IMHS" in page:
 
             # ── Scrollable table ──────────────────────────────────────────────
             st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price Table by Period</div>", unsafe_allow_html=True)
-            tbl = df_trend[df_trend["Period"] != "5.31.26"][["Period", "Date"] + metrics_imhs].copy()
-            tbl = tbl.sort_values("Date_ts").drop(columns=["Date_ts"], errors="ignore")
+            # sort by Date_ts BEFORE dropping columns
+            tbl = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")
+            tbl = tbl[["Period", "Date"] + metrics_imhs].copy()
             for m in metrics_imhs:
                 tbl[m] = tbl[m].apply(lambda v: f"${v:.0f}" if pd.notna(v) else "—")
             st.dataframe(tbl.set_index("Period"), use_container_width=True, height=300)
 
             # ── Bar chart per period ───────────────────────────────────────────
             st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — All Products</div>", unsafe_allow_html=True)
-            periods_ordered = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")["Period"].tolist()
+            df_b = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")
             fig_bar = go.Figure()
             for metric, col in zip(metrics_imhs, colors_imhs4):
-                df_b = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")
                 fig_bar.add_trace(go.Bar(
                     name=metric, x=df_b["Period"], y=df_b[metric],
                     marker_color=col,
