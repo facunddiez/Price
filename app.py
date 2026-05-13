@@ -755,12 +755,17 @@ elif "IMHS" in page:
     with tab2:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day of Week — IMHS (current period)</div>", unsafe_allow_html=True)
 
+        st.markdown("""<style>
+        div[data-testid="stRadio"] label {color:#FFFFFF !important; font-weight:600}
+        div[data-testid="stRadio"] label p {color:#FFFFFF !important}
+        </style>""", unsafe_allow_html=True)
         section_sel = st.radio("Pricing season", ["Non-Peak", "Peak / Holiday"], horizontal=True, label_visibility="collapsed")
         data_src = imhs_non_peak if section_sel == "Non-Peak" else imhs_peak
 
         days_avail = [d for d in DAY_ORDER if d in data_src]
         metrics_imhs = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
-        colors_imhs4 = [p, light, "#22c55e", "#86efac"]
+        # Distinct colors: green · cyan · amber · orange
+        colors_imhs4 = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
 
         fig = go.Figure()
         for metric, color in zip(metrics_imhs, colors_imhs4):
@@ -768,7 +773,7 @@ elif "IMHS" in page:
             fig.add_trace(go.Bar(name=metric, x=days_avail, y=vals,
                 marker_color=color,
                 text=[f"${v}" for v in vals], textposition="outside",
-                textfont=dict(color=color, size=11)))
+                textfont=dict(color="#FFFFFF", size=11)))
 
         layout = base_chart()
         layout.update(barmode="group", height=430, bargap=0.2, bargroupgap=0.06)
@@ -783,7 +788,7 @@ elif "IMHS" in page:
             type_filter = st.selectbox("Select day type", options=imhs_hist["Type"].unique().tolist(), label_visibility="visible")
             filtered = imhs_hist[imhs_hist["Type"] == type_filter].copy()
 
-            colors_imhs = [p, light, "#22c55e", "#86efac"]
+            colors_imhs = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
             metrics = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
 
             fig = go.Figure()
