@@ -511,6 +511,71 @@ if "Overview" in page:
     fig.update_layout(**layout)
     st.plotly_chart(fig, use_container_width=True)
 
+    # ── price by day filter ───────────────────────────────────────────────────
+    st.markdown("""<div style='font-size:18px;font-weight:700;color:#F8FAFC;margin-bottom:4px'>Price by Day of Week</div>
+    <div style='font-size:13px;color:#64748B;margin-bottom:16px'>Select a day to compare the main admission price across the three locations</div>""",
+    unsafe_allow_html=True)
+
+    selected_day = st.radio("Day", DAY_ORDER, horizontal=True, label_visibility="collapsed")
+
+    # WSD: map day → tier
+    wsd_tier = {"Mon":"Mon-Thu","Tue":"Mon-Thu","Wed":"Mon-Thu","Thu":"Mon-Thu",
+                "Fri":"Fri & Sun","Sat":"Saturday","Sun":"Fri & Sun"}
+    wsd_price = wsd_current["Day Pass"][wsd_tier[selected_day]]
+
+    # IMHS: look up from non_peak dict for that day
+    imhs_sel3  = imhs_non_peak.get(selected_day, {}).get("Select 3hr", 0)
+    imhs_selAD = imhs_non_peak.get(selected_day, {}).get("Select All-Day", 0)
+    imhs_pre3  = imhs_non_peak.get(selected_day, {}).get("Premier 3hr", 0)
+    imhs_preAD = imhs_non_peak.get(selected_day, {}).get("Premier All-Day", 0)
+
+    # ZCHS: Mon-Thu vs Fri/Sat/Sun
+    zchs_tier_key = "Mon-Thu" if selected_day in ("Mon","Tue","Wed","Thu") else "Fri/Sat/Sun"
+    zchs_qd  = zchs_current.get("Quick Dip Select (13+)", {}).get(zchs_tier_key, 0)
+    zchs_3hr = zchs_current.get("3hr Select (13+)", {}).get(zchs_tier_key, 0)
+    zchs_fd  = zchs_current.get("Full Day Select (13+)", {}).get(zchs_tier_key, 0)
+
+    wsd_p=C["WSD"]["p"]; imhs_p=C["IMHS"]["p"]; zchs_p=C["ZCHS"]["p"]
+    wsd_d=C["WSD"]["dark"]; imhs_d=C["IMHS"]["dark"]; zchs_d=C["ZCHS"]["dark"]
+
+    fig2 = go.Figure()
+
+    # WSD — one product (Day Pass)
+    fig2.add_trace(go.Bar(name="WSD Day Pass", x=["WSD Dallas"], y=[wsd_price],
+        marker_color=wsd_p, text=[f"${wsd_price}"], textposition="outside",
+        textfont=dict(color="#FFFFFF")))
+
+    # IMHS — 4 tiers
+    for label, val, color in [
+        ("IMHS Select 3hr",   imhs_sel3,  imhs_p),
+        ("IMHS Select All-Day", imhs_selAD, "#22c55e"),
+        ("IMHS Premier 3hr",  imhs_pre3,  "#86efac"),
+        ("IMHS Premier All-Day", imhs_preAD, imhs_d),
+    ]:
+        fig2.add_trace(go.Bar(name=label, x=["IMHS Colorado"], y=[val],
+            marker_color=color, text=[f"${val}"], textposition="outside",
+            textfont=dict(color="#FFFFFF")))
+
+    # ZCHS — 3 products
+    for label, val, color in [
+        ("ZCHS Quick Dip",  zchs_qd,  zchs_p),
+        ("ZCHS 3hr Select", zchs_3hr, "#ef4444"),
+        ("ZCHS Full Day",   zchs_fd,  zchs_d),
+    ]:
+        fig2.add_trace(go.Bar(name=label, x=["ZCHS Utah"], y=[val],
+            marker_color=color, text=[f"${val}"], textposition="outside",
+            textfont=dict(color="#FFFFFF")))
+
+    layout2 = base_chart()
+    layout2.update(barmode="group", height=380,
+        xaxis=dict(tickfont=dict(color="#FFFFFF", size=13)),
+        bargap=0.3, bargroupgap=0.06,
+        title=dict(text=f"Prices for {selected_day}", font=dict(color="#FFFFFF", size=14)),
+    )
+    fig2.update_layout(**layout2)
+    st.plotly_chart(fig2, use_container_width=True)
+    st.caption("IMHS shows non-peak pricing for the selected day. ZCHS Mon–Thu and Fri/Sat/Sun tiers.")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: WSD
