@@ -744,37 +744,46 @@ elif "WSD" in page:
             ], "Complimentary Classes", "WSD")
 
     with tab2:
-        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day of Week — WSD 2026</div>", unsafe_allow_html=True)
-        # WSD has 3 tiers: Mon-Thu, Fri&Sun, Sat → map to each day
-        days_full = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        day_tier  = ["Mon-Thu","Mon-Thu","Mon-Thu","Mon-Thu","Fri & Sun","Saturday","Fri & Sun"]
-        day_pass_by_day  = [wsd_current["Day Pass"][t] for t in day_tier]
-        evening_by_day   = [wsd_current["Evening Pass"][t] for t in day_tier]
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day Type — WSD 2026</div>", unsafe_allow_html=True)
 
-        colors_day = [p if t=="Mon-Thu" else (C["WSD"]["dark"] if t=="Saturday" else C["WSD"]["light"]) for t in day_tier]
+        wsd_products = list(wsd_current.keys())  # ["Day Pass", "Evening Pass"]
+        wsd_tiers    = ["Mon-Thu", "Fri & Sun", "Saturday"]
+        tier_colors  = [p, C["WSD"]["light"], C["WSD"]["dark"]]
 
         fig = go.Figure()
-        fig.add_trace(go.Bar(name="Day Pass", x=days_full, y=day_pass_by_day,
-            marker_color=colors_day, text=[f"${v}" for v in day_pass_by_day],
-            textposition="outside", textfont=dict(color="#FFFFFF")))
-        fig.add_trace(go.Bar(name="Evening Pass", x=days_full, y=evening_by_day,
-            marker_color=[c + "99" for c in colors_day],
-            text=[f"${v}" for v in evening_by_day],
-            textposition="outside", textfont=dict(color="#FFFFFF")))
-
+        for tier, col in zip(wsd_tiers, tier_colors):
+            vals = [wsd_current[pr][tier] for pr in wsd_products]
+            fig.add_trace(go.Bar(
+                name=tier, x=wsd_products, y=vals, marker_color=col,
+                text=[f"${v}" for v in vals], textposition="outside",
+                textfont=dict(color="#FFFFFF", size=12)
+            ))
         layout = base_chart()
-        layout.update(barmode="group", height=400,
-            annotations=[
-                dict(x=1.5, y=max(day_pass_by_day)+12, text="Mon–Thu", showarrow=False,
-                     font=dict(color=p, size=11)),
-                dict(x=4,   y=max(day_pass_by_day)+12, text="Fri & Sun", showarrow=False,
-                     font=dict(color=C["WSD"]["light"], size=11)),
-                dict(x=5,   y=max(day_pass_by_day)+12, text="Saturday", showarrow=False,
-                     font=dict(color=C["WSD"]["dark"], size=11)),
-            ])
+        layout.update(barmode="group", height=420, bargap=0.3, bargroupgap=0.08,
+            xaxis=dict(tickfont=dict(color="#FFFFFF", size=13)),
+            yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF")))
         fig.update_layout(**layout)
         st.plotly_chart(fig, use_container_width=True)
-        st.caption("Color indicates pricing tier: celeste = Mon-Thu · light blue = Fri & Sun · dark blue = Saturday")
+
+        # Weekend premium KPI cards
+        st.markdown(f"<div style='font-size:13px;font-weight:600;color:{p};margin-top:4px;margin-bottom:8px'>Weekend premium by product</div>", unsafe_allow_html=True)
+        bg_card = C["WSD"]["dark"] + "33"
+        cols_k = st.columns(len(wsd_products) * 2)
+        ci = 0
+        for pr in wsd_products:
+            mth = wsd_current[pr]["Mon-Thu"]
+            fri = wsd_current[pr]["Fri & Sun"]
+            sat = wsd_current[pr]["Saturday"]
+            pct_fri = round((fri - mth) / mth * 100, 1) if mth else 0
+            pct_sat = round((sat - mth) / mth * 100, 1) if mth else 0
+            for lbl, pct in [(f"{pr} · Fri/Sun", pct_fri), (f"{pr} · Sat", pct_sat)]:
+                with cols_k[ci]:
+                    st.markdown(f"""<div style='background:{bg_card};border:1px solid {p}30;
+                        border-radius:8px;padding:10px;text-align:center'>
+                        <div style='font-size:11px;color:#64748B;margin-bottom:4px'>{lbl}</div>
+                        <div style='font-size:20px;font-weight:700;color:{p}'>+{pct}%</div>
+                    </div>""", unsafe_allow_html=True)
+                ci += 1
 
     with tab3:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Soak Price History</div>", unsafe_allow_html=True)
