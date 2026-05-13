@@ -205,15 +205,13 @@ def chart_layout(fig, _loc: str, height: int = 420):
             font=dict(color="#FFFFFF", size=12),
         ),
         yaxis=dict(
-            title="Price (USD)",
+            title=dict(text="Price (USD)", font=dict(color="#FFFFFF")),
             gridcolor="#1E2D3D",
             tickfont=dict(color="#FFFFFF"),
-            titlefont=dict(color="#FFFFFF"),
             zeroline=False,
         ),
         xaxis=dict(
             tickfont=dict(color="#FFFFFF"),
-            titlefont=dict(color="#FFFFFF"),
         ),
         margin=dict(t=20, b=60, l=10, r=10),
     )
@@ -408,8 +406,8 @@ def base_chart():
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#FFFFFF", family="Inter"),
         legend=dict(orientation="h", y=-0.22, bgcolor="rgba(0,0,0,0)", font=dict(color="#FFFFFF", size=12)),
-        yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#FFFFFF"), zeroline=False, title="Price (USD)",
-                   titlefont=dict(color="#FFFFFF")),
+        yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#FFFFFF"), zeroline=False,
+                   title=dict(text="Price (USD)", font=dict(color="#FFFFFF"))),
         xaxis=dict(tickfont=dict(color="#FFFFFF")),
         margin=dict(t=20, b=60, l=10, r=10),
     )
