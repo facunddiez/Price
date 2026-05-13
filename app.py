@@ -310,27 +310,45 @@ def load_imhs():
     PK_MARKERS = {"holiday/peak pricing", "peak pricing", "holiday pricing",
                   "peak/holiday pricing", "holiday / peak pricing"}
 
+    def _to_num(v):
+        """Convert cell value to float — handles int, float, or text like '$50'."""
+        if isinstance(v, (int, float)):
+            return float(v)
+        try:
+            return float(str(v).replace("$", "").replace(",", "").strip())
+        except Exception:
+            return None
+
     def _extract_all_days(ws_h):
-        """Return (np_days, pk_days) — dicts of {day: {Select 3hr, ...}} for all found days."""
+        """Return (np_days, pk_days, debug_rows) — dicts of {day: {Select 3hr, ...}}."""
         sec = None
         np_days, pk_days = {}, {}
+        debug_rows = []  # first few rows near section markers for diagnostics
         for row in ws_h.iter_rows(values_only=True):
             # Scan every cell for section marker
             found_marker = False
             for val in row:
                 sv = str(val).strip().lower() if val is not None else ""
                 if sv in NP_MARKERS:
-                    sec = "non_peak"; found_marker = True; break
+                    sec = "non_peak"; found_marker = True
+                    debug_rows.append(f"NP marker found: {list(row[:8])}")
+                    break
                 elif sv in PK_MARKERS:
-                    sec = "peak"; found_marker = True; break
+                    sec = "peak"; found_marker = True
+                    debug_rows.append(f"PK marker found: {list(row[:8])}")
+                    break
             if found_marker or sec is None:
                 continue
             # Find a day label in any column, read 4 values to its right
             for ci, val in enumerate(row):
                 if val in DAY_SET:
+                    debug_rows.append(f"  Day '{val}' at col {ci}: next4={list(row[ci+1:ci+5])}")
                     try:
-                        v1, v2, v3, v4 = row[ci+1], row[ci+2], row[ci+3], row[ci+4]
-                        if isinstance(v1, (int, float)) and v1 is not None:
+                        v1 = _to_num(row[ci+1])
+                        v2 = _to_num(row[ci+2])
+                        v3 = _to_num(row[ci+3])
+                        v4 = _to_num(row[ci+4])
+                        if v1 is not None:
                             entry = {"Select 3hr": v1, "Select All-Day": v2,
                                      "Premier 3hr": v3, "Premier All-Day": v4}
                             if sec == "non_peak" and val not in np_days:
@@ -340,7 +358,7 @@ def load_imhs():
                     except Exception:
                         pass
                     break
-        return np_days, pk_days
+        return np_days, pk_days, debug_rows
 
     pricing_sheets_ordered = []
     for idx, sname in enumerate(wb.sheetnames):
@@ -353,11 +371,13 @@ def load_imhs():
     pricing_sheets_ordered.sort(key=lambda x: x[0])
 
     hist_records = []
+    sheet_debug = {}
     for ts, idx, sname in pricing_sheets_ordered:
         mo, da, yr = ts.month, ts.day, ts.year
         label    = f"{mo}.{da}.{str(yr)[2:]}"
         date_str = f"{mo}.{da}.{yr}"
-        np_days, pk_days = _extract_all_days(wb[sname])
+        np_days, pk_days, dbg = _extract_all_days(wb[sname])
+        sheet_debug[sname] = {"np": len(np_days), "pk": len(pk_days), "log": dbg[:10]}
         for day in DAY_ORDER:
             if day in np_days:
                 hist_records.append({"Period": label, "Date": date_str,
@@ -386,12 +406,12 @@ def load_imhs():
         f"**Non-Peak records:** {sum(1 for r in hist_records if r['Type']=='Non-Peak')}",
         f"**Peak records:** {sum(1 for r in hist_records if r['Type']=='Peak')}",
         f"**Periods:** {periods_found}",
-        "", "**All workbook sheets:**"
+        "", "**Per-sheet extraction log:**"
     ]
-    for sname in wb.sheetnames:
-        ts = _try_parse_start(sname)
-        status = f"✅ parsed as {ts.date()}" if ts is not pd.NaT else "⚠️ skipped (name not parsed)"
-        debug_lines.append(f"- `{sname}` — {status}")
+    for sname, info in sheet_debug.items():
+        debug_lines.append(f"\n**`{sname}`** — NP days={info['np']}, PK days={info['pk']}")
+        for line in info["log"]:
+            debug_lines.append(f"  `{line}`")
 
     return non_peak, peak, pd.DataFrame(hist_records), "\n".join(debug_lines)
 
