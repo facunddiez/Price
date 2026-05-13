@@ -57,12 +57,17 @@ st.markdown("""
 /* Tabs */
 button[data-baseweb="tab"] {
     background: transparent !important;
-    color: #64748B !important;
+    color: #94A3B8 !important;
     border-bottom: 2px solid transparent !important;
     font-weight: 500 !important;
+    font-size: 14px !important;
+}
+button[data-baseweb="tab"]:hover {
+    color: #F8FAFC !important;
 }
 button[data-baseweb="tab"][aria-selected="true"] {
-    color: #F8FAFC !important;
+    color: #FFFFFF !important;
+    font-weight: 600 !important;
     border-bottom: 2px solid currentColor !important;
 }
 
@@ -395,13 +400,7 @@ with st.sidebar:
         label_visibility="collapsed",
     )
 
-    st.markdown(f"""
-    <div style='position:absolute;bottom:20px;left:16px;right:16px;'>
-        <div style='font-size:11px;color:#334155;border-top:1px solid #1E2D3D;padding-top:12px'>
-            Updated {datetime.today().strftime('%b %d, %Y')}
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div style='margin-top:24px;font-size:11px;color:#334155;border-top:1px solid #1E2D3D;padding-top:10px'>Updated {datetime.today().strftime('%b %d, %Y')}</div>", unsafe_allow_html=True)
 
 
 def base_chart():
@@ -524,7 +523,7 @@ elif "WSD" in page:
 
     banner("Worldsprings Dallas", "WSD — Dallas, TX  ·  2026 Pricing", "WSD", "💧")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History  ", "  Spa Menu  "])
+    tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History  "])
 
     with tab1:
         col1, col2 = st.columns(2)
@@ -608,14 +607,6 @@ elif "WSD" in page:
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(wsd_hist.set_index("Period"), use_container_width=True)
 
-    with tab4:
-        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Spa Services — 2026 Rates</div>", unsafe_allow_html=True)
-        st.caption("All 50-min services include Day Pass & robe unless noted.")
-        if not wsd_spa.empty:
-            disp = wsd_spa.copy()
-            for c in ["Mon-Thu", "Fri & Sun", "Saturday"]:
-                disp[c] = disp[c].apply(lambda v: f"${v:,.0f}" if isinstance(v,(int,float)) else (str(v) if v else "—"))
-            st.dataframe(disp.set_index("Service"), use_container_width=True)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
