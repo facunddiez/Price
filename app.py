@@ -755,31 +755,87 @@ elif "IMHS" in page:
     with tab2:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day of Week — IMHS (current period)</div>", unsafe_allow_html=True)
 
-        st.markdown("""<style>
-        div[data-testid="stRadio"] label {color:#FFFFFF !important; font-weight:600}
-        div[data-testid="stRadio"] label p {color:#FFFFFF !important}
-        </style>""", unsafe_allow_html=True)
-        section_sel = st.radio("Pricing season", ["Non-Peak", "Peak / Holiday"], horizontal=True, label_visibility="collapsed")
-        data_src = imhs_non_peak if section_sel == "Non-Peak" else imhs_peak
-
-        days_avail = [d for d in DAY_ORDER if d in data_src]
+        days_np   = [d for d in DAY_ORDER if d in imhs_non_peak]
+        days_pk   = [d for d in DAY_ORDER if d in imhs_peak]
         metrics_imhs = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
-        # Distinct colors: green · cyan · amber · orange
-        colors_imhs4 = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
+        # 4-step green gradient: light → dark
+        colors_g4 = ["#A7F3D0", "#4ADE80", "#22C55E", "#15803D"]
 
-        fig = go.Figure()
-        for metric, color in zip(metrics_imhs, colors_imhs4):
-            vals = [data_src[d][metric] for d in days_avail]
-            fig.add_trace(go.Bar(name=metric, x=days_avail, y=vals,
-                marker_color=color,
-                text=[f"${v}" for v in vals], textposition="outside",
-                textfont=dict(color="#FFFFFF", size=11)))
+        def _imhs_bar(data_src, days, title):
+            fig = go.Figure()
+            for metric, color in zip(metrics_imhs, colors_g4):
+                vals = [data_src.get(d, {}).get(metric, 0) for d in days]
+                fig.add_trace(go.Bar(name=metric, x=days, y=vals,
+                    marker_color=color,
+                    text=[f"${v}" for v in vals], textposition="outside",
+                    textfont=dict(color="#FFFFFF", size=10)))
+            layout = base_chart()
+            layout.update(barmode="group", height=370, bargap=0.2, bargroupgap=0.06,
+                title=dict(text=title, font=dict(color="#FFFFFF", size=13), x=0.5),
+                xaxis=dict(tickfont=dict(color="#FFFFFF")),
+                yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF")),
+                legend=dict(font=dict(color="#FFFFFF", size=10)),
+                showlegend=True)
+            fig.update_layout(**layout)
+            return fig
 
-        layout = base_chart()
-        layout.update(barmode="group", height=430, bargap=0.2, bargroupgap=0.06)
-        fig.update_layout(**layout)
-        st.plotly_chart(fig, use_container_width=True)
-        st.caption("Shows how pricing varies across days of the week within the current pricing period.")
+        col_np, col_pk = st.columns(2)
+        with col_np:
+            st.plotly_chart(_imhs_bar(imhs_non_peak, days_np, "Non-Peak Pricing"), use_container_width=True)
+        with col_pk:
+            st.plotly_chart(_imhs_bar(imhs_peak, days_pk, "Peak / Holiday Pricing"), use_container_width=True)
+
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        def _kpi_card(label, value_str, color, bg):
+            return f"""<div style='background:{bg};border:1px solid {color}40;border-radius:8px;
+                padding:10px 8px;text-align:center;min-width:0'>
+                <div style='font-size:10px;color:#94A3B8;margin-bottom:4px;line-height:1.3'>{label}</div>
+                <div style='font-size:18px;font-weight:700;color:{color}'>{value_str}</div>
+            </div>"""
+
+        bg_card = C["IMHS"]["dark"] + "33"
+
+        # -- Weekend premium (Non-Peak: Sat vs Mon) --
+        np_mon = imhs_non_peak.get("Mon", {})
+        np_sat = imhs_non_peak.get("Sat", {})
+        st.markdown(f"<div style='font-size:13px;font-weight:600;color:{p};margin:18px 0 8px'>Weekend Premium — Non-Peak (Sat vs Mon)</div>", unsafe_allow_html=True)
+        cols_w = st.columns(len(metrics_imhs))
+        for i, metric in enumerate(metrics_imhs):
+            mon_v = np_mon.get(metric) or 0
+            sat_v = np_sat.get(metric) or 0
+            pct = round((sat_v - mon_v) / mon_v * 100, 1) if mon_v else 0
+            with cols_w[i]:
+                st.markdown(_kpi_card(metric, f"+{pct}%", p, bg_card), unsafe_allow_html=True)
+
+        # -- Select vs Premier (Non-Peak Mon) --
+        st.markdown(f"<div style='font-size:13px;font-weight:600;color:{p};margin:18px 0 8px'>Premier vs Select Premium — Non-Peak Mon</div>", unsafe_allow_html=True)
+        comparisons_sp = [
+            ("3hr  ·  Premier vs Select", "Premier 3hr", "Select 3hr"),
+            ("All-Day  ·  Premier vs Select", "Premier All-Day", "Select All-Day"),
+        ]
+        cols_sp = st.columns(2)
+        for i, (lbl, higher, lower) in enumerate(comparisons_sp):
+            h = np_mon.get(higher) or 0
+            l = np_mon.get(lower) or 0
+            pct = round((h - l) / l * 100, 1) if l else 0
+            with cols_sp[i]:
+                st.markdown(_kpi_card(lbl, f"+{pct}%", C["IMHS"]["light"], bg_card), unsafe_allow_html=True)
+
+        # -- Non-Peak vs Peak (Mon and Sat) --
+        pk_mon = imhs_peak.get("Mon", {})
+        pk_sat = imhs_peak.get("Sat", {})
+        st.markdown(f"<div style='font-size:13px;font-weight:600;color:{p};margin:18px 0 8px'>Peak vs Non-Peak Premium</div>", unsafe_allow_html=True)
+        ref_days = [("Mon", np_mon, pk_mon), ("Sat", np_sat, pk_sat)]
+        for day_lbl, np_d, pk_d in ref_days:
+            cols_pk = st.columns(len(metrics_imhs))
+            st.markdown(f"<div style='font-size:11px;color:#64748B;margin:6px 0 4px'>{day_lbl}</div>", unsafe_allow_html=True)
+            for i, metric in enumerate(metrics_imhs):
+                np_v = np_d.get(metric) or 0
+                pk_v = pk_d.get(metric) or 0
+                pct = round((pk_v - np_v) / np_v * 100, 1) if np_v else 0
+                sign = "+" if pct >= 0 else ""
+                with cols_pk[i]:
+                    st.markdown(_kpi_card(metric, f"{sign}{pct}%", C["IMHS"]["light"], bg_card), unsafe_allow_html=True)
 
     with tab3:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — 2022 to Present</div>", unsafe_allow_html=True)
