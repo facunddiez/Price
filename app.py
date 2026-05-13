@@ -280,72 +280,74 @@ def load_imhs():
             d = {"Select 3hr": row[3], "Select All-Day": row[4], "Premier 3hr": row[5], "Premier All-Day": row[6]}
             (non_peak if section == "non_peak" else peak)[label] = d
 
-    def _sheet_start(sname):
-        """Extract (label, date_str, Timestamp) from a sheet name like '5.23.2022-1.22.2023',
-        '11.4.24-2.28.25', 'Pricing 3.30.26-5.31.26'. Returns None if not a pricing sheet."""
+    def _try_parse_start(sname):
+        """Best-effort: extract a start Timestamp from a sheet name. Returns pd.NaT if unparseable."""
         n = sname.strip()
         if n.lower().startswith("pricing "):
             n = n[8:].strip()
-        # take the part before any dash/space separator
         start_part = n.replace(" ", "").split("-")[0]
         parts = start_part.split(".")
         if len(parts) != 3:
-            return None
+            return pd.NaT
         try:
             mo, da, yr = int(parts[0]), int(parts[1]), int(parts[2])
-        except ValueError:
-            return None
-        if yr < 100:
-            yr += 2000
-        if not (1 <= mo <= 12 and 1 <= da <= 31 and 2015 <= yr <= 2035):
-            return None
-        try:
-            ts = pd.Timestamp(f"{yr}-{mo:02d}-{da:02d}")
+            if yr < 100:
+                yr += 2000
+            if not (1 <= mo <= 12 and 1 <= da <= 31 and 2015 <= yr <= 2035):
+                return pd.NaT
+            return pd.Timestamp(f"{yr}-{mo:02d}-{da:02d}")
         except Exception:
-            return None
-        label    = f"{mo}.{da}.{str(yr)[2:]}"   # e.g. "5.23.22"
-        date_str = f"{mo}.{da}.{yr}"            # e.g. "5.23.2022"
-        return label, date_str, ts
+            return pd.NaT
 
-    # Auto-discover all pricing sheets by parsing their names
-    pricing_sheets_found = []
-    for sname in wb.sheetnames:
-        result = _sheet_start(sname)
-        if result:
-            label, date_str, ts = result
-            pricing_sheets_found.append((ts, sname, label, date_str))
-    pricing_sheets_found.sort(key=lambda x: x[0])  # chronological order
-
-    hist_records = []
-    for ts, sname, label, date_str in pricing_sheets_found:
+    # Scan ALL sheets by CONTENT: any sheet with "Non-Peak Pricing" is a pricing sheet.
+    # Sort by parsed start date when possible, otherwise preserve sheet order.
+    NON_PRICING = {"2015 - Present DAy"}
+    content_sheets = []
+    for idx, sname in enumerate(wb.sheetnames):
+        if sname in NON_PRICING:
+            continue
         ws_h = wb[sname]
         sec = None
         added_np = False
         added_pk = False
+        np_row = pk_row = None
         for row in ws_h.iter_rows(values_only=True):
             lbl = row[2] if len(row) > 2 else None
             if lbl == "Non-Peak Pricing":
                 sec = "non_peak"
             elif lbl == "Holiday/Peak Pricing":
                 sec = "peak"
-            elif lbl == "Mon" and sec == "non_peak" and not added_np:
-                try:
-                    if row[3] is not None:
-                        hist_records.append({"Period": label, "Date": date_str, "Type": "Non-Peak Mon",
-                            "Select 3hr": row[3], "Select All-Day": row[4],
-                            "Premier 3hr": row[5], "Premier All-Day": row[6]})
-                        added_np = True
-                except Exception:
-                    pass
-            elif lbl == "Sat" and sec == "peak" and not added_pk:
-                try:
-                    if row[3] is not None:
-                        hist_records.append({"Period": label, "Date": date_str, "Type": "Peak Sat",
-                            "Select 3hr": row[3], "Select All-Day": row[4],
-                            "Premier 3hr": row[5], "Premier All-Day": row[6]})
-                        added_pk = True
-                except Exception:
-                    pass
+            elif lbl == "Mon" and sec == "non_peak" and not added_np and len(row) > 6 and row[3] is not None:
+                np_row = row; added_np = True
+            elif lbl == "Sat" and sec == "peak" and not added_pk and len(row) > 6 and row[3] is not None:
+                pk_row = row; added_pk = True
+            if added_np and added_pk:
+                break
+        if np_row is None and pk_row is None:
+            continue  # not a pricing sheet
+        ts = _try_parse_start(sname)
+        content_sheets.append((ts, idx, sname, np_row, pk_row))
+
+    # Sort: parseable dates first (chronological), unparseable by sheet order
+    content_sheets.sort(key=lambda x: (x[0] is pd.NaT, x[0] if x[0] is not pd.NaT else pd.Timestamp("2099-01-01"), x[1]))
+
+    hist_records = []
+    for ts, idx, sname, np_row, pk_row in content_sheets:
+        if ts is pd.NaT:
+            label    = sname
+            date_str = sname
+        else:
+            mo, da, yr = ts.month, ts.day, ts.year
+            label    = f"{mo}.{da}.{str(yr)[2:]}"
+            date_str = f"{mo}.{da}.{yr}"
+        if np_row is not None:
+            hist_records.append({"Period": label, "Date": date_str, "Type": "Non-Peak Mon",
+                "Select 3hr": np_row[3], "Select All-Day": np_row[4],
+                "Premier 3hr": np_row[5], "Premier All-Day": np_row[6]})
+        if pk_row is not None:
+            hist_records.append({"Period": label, "Date": date_str, "Type": "Peak Sat",
+                "Select 3hr": pk_row[3], "Select All-Day": pk_row[4],
+                "Premier 3hr": pk_row[5], "Premier All-Day": pk_row[6]})
 
     ws_yoy = wb["2015 - Present DAy"]
     adult_peak_row = None
