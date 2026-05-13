@@ -370,30 +370,42 @@ def load_zchs():
     for period, (sheet_name, date_s) in pricing_sheets.items():
         if sheet_name not in wb.sheetnames: continue
         seen[period] = set()
+        in_section = None  # tracks current section for Jan 2025 format
+
         for row in wb[sheet_name].iter_rows(values_only=True):
             lbl = str(row[0]).strip() if row[0] else ""
             v1 = row[1] if isinstance(row[1], (int, float)) else None
             v2 = row[2] if isinstance(row[2], (int, float)) else None
+
+            # Detect section headers (non-numeric col B = header row)
+            if v1 is None:
+                if "Quick Dip" in lbl:
+                    in_section = "qd"
+                elif "Day Pass" in lbl or ("Full Day" in lbl and "Soak" in lbl):
+                    in_section = "fd"
+                continue
+
+            def _add(prod):
+                key = (prod, period)
+                if key not in seen[period]:
+                    seen[period].add(key)
+                    hist_records.append({"Period": period, "Date": date_s,
+                                         "Product": prod, "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+
+            # Jan 2025 format: bare "Select Access" row identified by section context
+            if lbl == "Select Access":
+                if in_section == "qd":
+                    _add("Quick Dip Select (13+)")
+                elif in_section == "fd":
+                    _add("Full Day Select (13+)")
+
+            # Jul/Nov 2025 format: full descriptive labels
             if "Quick Dip Adult / Teen" in lbl and "Select" in lbl:
-                key = ("Quick Dip Select (13+)", period)
-                if v1 and key not in seen[period]:
-                    seen[period].add(key)
-                    hist_records.append({"Period": period, "Date": date_s, "Product": "Quick Dip Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+                _add("Quick Dip Select (13+)")
             elif "3-hour Adult / Teen" in lbl and "Select" in lbl and "Eat" not in lbl:
-                key = ("3hr Select (13+)", period)
-                if v1 and key not in seen[period]:
-                    seen[period].add(key)
-                    hist_records.append({"Period": period, "Date": date_s, "Product": "3hr Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
-            elif "3- Hour Soak Adult: Premier" in lbl:
-                key = ("3hr Premier (21+)", period)
-                if v1 and key not in seen[period]:
-                    seen[period].add(key)
-                    hist_records.append({"Period": period, "Date": date_s, "Product": "3hr Premier (21+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+                _add("3hr Select (13+)")
             elif "Full Day Soak Ages 13+" in lbl:
-                key = ("Full Day Select (13+)", period)
-                if v1 and key not in seen[period]:
-                    seen[period].add(key)
-                    hist_records.append({"Period": period, "Date": date_s, "Product": "Full Day Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+                _add("Full Day Select (13+)")
 
     return current, pd.DataFrame(hist_records)
 
