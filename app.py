@@ -342,9 +342,11 @@ def load_zchs():
     for row in rows:
         label = str(row[0]).strip() if row[0] else ""
         if "Quick Dip Adult / Teen" in label and "Select" in label:
-            current["Quick Dip Select (13+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
+            if "Quick Dip Select (13+)" not in current:
+                current["Quick Dip Select (13+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
         elif "Quick Dip Adult: Premier" in label:
-            current["Quick Dip Premier (21+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
+            if "Quick Dip Premier (21+)" not in current:
+                current["Quick Dip Premier (21+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
         elif "3-hour Adult / Teen" in label and "Select" in label and "Eat" not in label:
             if "3hr Select (13+)" not in current:
                 current["3hr Select (13+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
@@ -352,9 +354,11 @@ def load_zchs():
             if "3hr Premier (21+)" not in current:
                 current["3hr Premier (21+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
         elif "Full Day Soak Ages 13+" in label:
-            current["Full Day Select (13+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
+            if "Full Day Select (13+)" not in current:
+                current["Full Day Select (13+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
         elif "Full Day Adult: Premier" in label:
-            current["Full Day Premier (21+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
+            if "Full Day Premier (21+)" not in current:
+                current["Full Day Premier (21+)"] = {"Mon-Thu": row[1], "Fri/Sat/Sun": row[2]}
 
     pricing_sheets = {
         "Jan 2025": ("Pricing 2_3_2025", "1.22.2025"),
