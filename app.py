@@ -366,22 +366,34 @@ def load_zchs():
         "Nov 2025": ("Pricing 11_2025",  "11.1.2025"),
     }
     hist_records = []
+    seen = {}
     for period, (sheet_name, date_s) in pricing_sheets.items():
         if sheet_name not in wb.sheetnames: continue
+        seen[period] = set()
         for row in wb[sheet_name].iter_rows(values_only=True):
             lbl = str(row[0]).strip() if row[0] else ""
-            if "3-hour Adult / Teen" in lbl and "Select" in lbl and "Eat" not in lbl:
-                v1 = row[1] if isinstance(row[1], (int, float)) else None
-                v2 = row[2] if isinstance(row[2], (int, float)) else None
-                if v1: hist_records.append({"Period": period, "Product": "3hr Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+            v1 = row[1] if isinstance(row[1], (int, float)) else None
+            v2 = row[2] if isinstance(row[2], (int, float)) else None
+            if "Quick Dip Adult / Teen" in lbl and "Select" in lbl:
+                key = ("Quick Dip Select (13+)", period)
+                if v1 and key not in seen[period]:
+                    seen[period].add(key)
+                    hist_records.append({"Period": period, "Date": date_s, "Product": "Quick Dip Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+            elif "3-hour Adult / Teen" in lbl and "Select" in lbl and "Eat" not in lbl:
+                key = ("3hr Select (13+)", period)
+                if v1 and key not in seen[period]:
+                    seen[period].add(key)
+                    hist_records.append({"Period": period, "Date": date_s, "Product": "3hr Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
             elif "3- Hour Soak Adult: Premier" in lbl:
-                v1 = row[1] if isinstance(row[1], (int, float)) else None
-                v2 = row[2] if isinstance(row[2], (int, float)) else None
-                if v1: hist_records.append({"Period": period, "Product": "3hr Premier (21+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+                key = ("3hr Premier (21+)", period)
+                if v1 and key not in seen[period]:
+                    seen[period].add(key)
+                    hist_records.append({"Period": period, "Date": date_s, "Product": "3hr Premier (21+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
             elif "Full Day Soak Ages 13+" in lbl:
-                v1 = row[1] if isinstance(row[1], (int, float)) else None
-                v2 = row[2] if isinstance(row[2], (int, float)) else None
-                if v1: hist_records.append({"Period": period, "Product": "Full Day Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
+                key = ("Full Day Select (13+)", period)
+                if v1 and key not in seen[period]:
+                    seen[period].add(key)
+                    hist_records.append({"Period": period, "Date": date_s, "Product": "Full Day Select (13+)", "Mon-Thu": v1, "Fri/Sat/Sun": v2})
 
     return current, pd.DataFrame(hist_records)
 
@@ -836,24 +848,80 @@ elif "ZCHS" in page:
 
     with tab3:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — Since Opening</div>", unsafe_allow_html=True)
-        st.caption("ZCHS opened January 2025. Three pricing periods captured.")
 
         if not zchs_hist.empty:
-            product_filter = st.selectbox("Product", options=zchs_hist["Product"].unique().tolist(), label_visibility="visible")
-            filtered = zchs_hist[zchs_hist["Product"] == product_filter]
+            date_map = {
+                "Jan 2025": pd.Timestamp("2025-01-22"),
+                "Jul 2025": pd.Timestamp("2025-07-01"),
+                "Nov 2025": pd.Timestamp("2025-11-01"),
+            }
+            hist_dated = zchs_hist.copy()
+            hist_dated["Date"] = hist_dated["Period"].map(date_map)
 
-            fig = go.Figure()
-            fig.add_trace(go.Bar(name="Mon-Thu", x=filtered["Period"], y=filtered["Mon-Thu"],
-                marker_color=p, text=filtered["Mon-Thu"].apply(lambda v: f"${v}" if pd.notna(v) else ""),
-                textposition="outside", textfont=dict(color=p)))
-            fig.add_trace(go.Bar(name="Fri/Sat/Sun", x=filtered["Period"], y=filtered["Fri/Sat/Sun"],
-                marker_color=C["ZCHS"]["dark"], text=filtered["Fri/Sat/Sun"].apply(lambda v: f"${v}" if pd.notna(v) else ""),
-                textposition="outside", textfont=dict(color=light)))
+            # Extend Nov 2025 prices to today (no newer sheet)
+            today_ts = pd.Timestamp("2026-05-13")
+            nov_rows = hist_dated[hist_dated["Period"] == "Nov 2025"].copy()
+            nov_rows["Period"] = "May 2026"
+            nov_rows["Date"] = today_ts
+            extended = pd.concat([hist_dated, nov_rows], ignore_index=True)
 
-            layout = base_chart()
-            layout.update(barmode="group", height=400, bargap=0.35)
-            fig.update_layout(**layout)
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(filtered.set_index("Period"), use_container_width=True)
+            key_products = ["Quick Dip Select (13+)", "3hr Select (13+)", "Full Day Select (13+)"]
+            prod_colors  = [C["ZCHS"]["light"], p, C["ZCHS"]["dark"]]
+            periods_order = ["Jan 2025", "Jul 2025", "Nov 2025", "May 2026"]
+
+            day_type = st.radio("Price type", ["Mon-Thu", "Fri/Sat/Sun"], horizontal=True)
+
+            # ── Trendline ─────────────────────────────────────────────────────
+            fig_trend = go.Figure()
+            for prod, col in zip(key_products, prod_colors):
+                df_p = extended[extended["Product"] == prod].sort_values("Date")
+                if df_p.empty: continue
+                fig_trend.add_trace(go.Scatter(
+                    x=df_p["Date"], y=df_p[day_type],
+                    name=prod, mode="lines+markers",
+                    line=dict(color=col, width=2.5),
+                    marker=dict(size=9, color=col),
+                    hovertemplate=f"<b>{prod}</b><br>%{{x|%b %Y}}: $%{{y}}<extra></extra>"
+                ))
+            layout_t = base_chart()
+            layout_t.update(height=420,
+                xaxis=dict(tickformat="%b %Y", tickfont=dict(color="#FFFFFF", size=11)),
+                yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
+                legend=dict(font=dict(color="#FFFFFF", size=11)),
+                title=dict(text=f"Price Trend ({day_type})", font=dict(color="#FFFFFF", size=14), x=0.5),
+            )
+            fig_trend.update_layout(**layout_t)
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+            # ── Table ─────────────────────────────────────────────────────────
+            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price Table by Period</div>", unsafe_allow_html=True)
+            tbl = extended[extended["Product"].isin(key_products)][["Period","Product","Mon-Thu","Fri/Sat/Sun"]].copy()
+            tbl["Period"] = pd.Categorical(tbl["Period"], categories=periods_order, ordered=True)
+            tbl = tbl.sort_values(["Period","Product"]).rename(columns={"Period": "Month"})
+            tbl["Mon-Thu"]     = tbl["Mon-Thu"].apply(lambda v: f"${v:.0f}" if pd.notna(v) else "—")
+            tbl["Fri/Sat/Sun"] = tbl["Fri/Sat/Sun"].apply(lambda v: f"${v:.0f}" if pd.notna(v) else "—")
+            st.dataframe(tbl.set_index("Month"), use_container_width=True)
+
+            # ── Bar chart per period ───────────────────────────────────────────
+            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — Key Products</div>", unsafe_allow_html=True)
+            fig_bar = go.Figure()
+            for prod, col in zip(key_products, prod_colors):
+                df_p = extended[extended["Product"] == prod].copy()
+                df_p["Period"] = pd.Categorical(df_p["Period"], categories=periods_order, ordered=True)
+                df_p = df_p.drop_duplicates("Period").set_index("Period").reindex(periods_order).reset_index()
+                fig_bar.add_trace(go.Bar(
+                    name=prod, x=df_p["Period"], y=df_p[day_type],
+                    marker_color=col,
+                    text=df_p[day_type].apply(lambda v: f"${v:.0f}" if pd.notna(v) else ""),
+                    textposition="outside", textfont=dict(color="#FFFFFF", size=11)
+                ))
+            layout_b = base_chart()
+            layout_b.update(barmode="group", height=420, bargap=0.2, bargroupgap=0.08,
+                xaxis=dict(tickfont=dict(color="#FFFFFF", size=11)),
+                yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
+                legend=dict(font=dict(color="#FFFFFF", size=11)),
+            )
+            fig_bar.update_layout(**layout_b)
+            st.plotly_chart(fig_bar, use_container_width=True)
         else:
             st.info("No historical data parsed yet.")
