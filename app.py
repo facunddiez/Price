@@ -393,9 +393,11 @@ def load_zchs():
                                          "Product": prod, "Mon-Thu": v1, "Fri/Sat/Sun": v2})
 
             # Jan 2025 format: bare "Select Access" row identified by section context
+            # "Quick Dip (3 hours)" in Jan 2025 = same 3-hour product as "3hr Select" later
+            # The short Quick Dip (~1.5hr) is a new product added from Jul 2025 onward
             if lbl == "Select Access":
                 if in_section == "qd":
-                    _add("Quick Dip Select (13+)")
+                    _add("3hr Select (13+)")
                 elif in_section == "fd":
                     _add("Full Day Select (13+)")
 
