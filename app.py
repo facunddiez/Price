@@ -879,7 +879,7 @@ elif "IMHS" in page:
                     return pd.NaT
 
             metrics_imhs = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
-            colors_imhs4 = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
+            colors_imhs4 = ["#A7F3D0", "#4ADE80", "#22C55E", "#15803D"]
             end_ts = pd.Timestamp("2026-05-31")
 
             # Build dated dataframes for each day type
