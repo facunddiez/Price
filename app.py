@@ -81,7 +81,6 @@ button[data-baseweb="tab"][aria-selected="true"] {
 def inject_page_bg(loc: str):
     bg = C[loc]["bg"]
     glow = C[loc]["glow"]
-    primary = C[loc]["p"]
     st.markdown(f"""
     <style>
     .stApp, [data-testid="stAppViewContainer"] {{
@@ -173,8 +172,6 @@ def price_table(data: dict, title: str, loc: str, subtitle: str = ""):
 def simple_table(rows: list, title: str, loc: str):
     """rows = list of (label, value) tuples"""
     p = C[loc]["p"]
-    dark = C[loc]["dark"]
-    light = C[loc]["light"]
     rows_html = "".join(
         f"<tr style='background:{'#ffffff06' if i%2==0 else 'transparent'}'>"
         f"<td style='padding:8px 14px;color:#CBD5E1;font-size:13px'>{r[0]}</td>"
@@ -191,17 +188,15 @@ def simple_table(rows: list, title: str, loc: str):
     """, unsafe_allow_html=True)
 
 
-def chart_layout(fig, loc: str, height: int = 420):
-    p = C[loc]["p"]
-    bg = C[loc]["bg"]
+def chart_layout(fig, _loc: str, height: int = 420):
     fig.update_layout(
-        plot_bgcolor="#00000000",
-        paper_bgcolor="#00000000",
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
         font=dict(color="#94A3B8", family="Inter"),
         height=height,
         legend=dict(
             orientation="h", y=-0.22,
-            bgcolor="#00000000",
+            bgcolor="rgba(0,0,0,0)",
             font=dict(color="#94A3B8", size=12),
         ),
         yaxis=dict(
@@ -409,6 +404,17 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
 
+def base_chart():
+    return dict(
+        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#94A3B8", family="Inter"),
+        legend=dict(orientation="h", y=-0.22, bgcolor="rgba(0,0,0,0)", font=dict(size=12)),
+        yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#64748B"), zeroline=False, title="Price (USD)"),
+        xaxis=dict(tickfont=dict(color="#94A3B8")),
+        margin=dict(t=20, b=60, l=10, r=10),
+    )
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # PAGE: OVERVIEW
 # ══════════════════════════════════════════════════════════════════════════════
@@ -418,146 +424,93 @@ if "Overview" in page:
     zchs_current, _ = load_zchs()
 
     st.markdown("""
-    <div style='padding:32px 0 8px 0'>
+    <div style='padding:32px 0 16px 0'>
         <div style='font-size:32px;font-weight:700;color:#F8FAFC;letter-spacing:-1px'>Pricing Overview</div>
         <div style='font-size:14px;color:#64748B;margin-top:6px'>All three locations — current rates at a glance</div>
     </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        wsd_p = C["WSD"]["p"]
-        wsd_d = C["WSD"]["dark"]
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg,{wsd_d}44,{wsd_p}18);border:1px solid {wsd_p}33;
-                    border-radius:14px;padding:20px 20px 4px 20px;min-height:520px'>
-            <div style='font-size:11px;font-weight:700;color:{wsd_p};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px'>WSD</div>
-            <div style='font-size:18px;font-weight:700;color:#F8FAFC;margin-bottom:2px'>Dallas, TX</div>
-            <div style='font-size:12px;color:#64748B;margin-bottom:16px'>Worldsprings Dallas</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col2:
-        imhs_p = C["IMHS"]["p"]
-        imhs_d = C["IMHS"]["dark"]
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg,{imhs_d}44,{imhs_p}18);border:1px solid {imhs_p}33;
-                    border-radius:14px;padding:20px 20px 4px 20px;min-height:520px'>
-            <div style='font-size:11px;font-weight:700;color:{imhs_p};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px'>IMHS</div>
-            <div style='font-size:18px;font-weight:700;color:#F8FAFC;margin-bottom:2px'>Glenwood Springs, CO</div>
-            <div style='font-size:12px;color:#64748B;margin-bottom:16px'>Iron Mountain Hot Springs</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col3:
-        zchs_p = C["ZCHS"]["p"]
-        zchs_d = C["ZCHS"]["dark"]
-        st.markdown(f"""
-        <div style='background:linear-gradient(135deg,{zchs_d}44,{zchs_p}18);border:1px solid {zchs_p}33;
-                    border-radius:14px;padding:20px 20px 4px 20px;min-height:520px'>
-            <div style='font-size:11px;font-weight:700;color:{zchs_p};text-transform:uppercase;letter-spacing:1.5px;margin-bottom:6px'>ZCHS</div>
-            <div style='font-size:18px;font-weight:700;color:#F8FAFC;margin-bottom:2px'>Zion Canyon, UT</div>
-            <div style='font-size:12px;color:#64748B;margin-bottom:16px'>Zion Canyon Hot Springs</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # render tables inside each column
-    with col1:
+        wsd_p = C["WSD"]["p"]; wsd_d = C["WSD"]["dark"]
+        st.markdown(f"""<div style='background:linear-gradient(135deg,{wsd_d}55,{wsd_p}20);
+            border:1px solid {wsd_p}40;border-radius:12px;padding:14px 18px;margin-bottom:12px'>
+            <span style='font-size:11px;font-weight:700;color:{wsd_p};text-transform:uppercase;letter-spacing:1.5px'>WSD</span>
+            <span style='font-size:15px;font-weight:700;color:#F8FAFC;margin-left:10px'>Dallas, TX</span>
+        </div>""", unsafe_allow_html=True)
         price_table(wsd_current, "Soak Admission", "WSD")
-        simple_table([
-            ("1-Month Trial", "$125"),
-            ("Weekday Annual", "$948/yr"),
-            ("Anytime Annual", "$1,788/yr"),
-        ], "Memberships", "WSD")
-        simple_table([
-            ("Robe Rental", "$10"),
-            ("Cabana (Mon-Thu)", "$199"),
-            ("Cabana (Sat)", "$299"),
-        ], "Add-ons", "WSD")
+        simple_table([("1-Month Trial","$125"),("Weekday Annual","$948/yr"),("Anytime Annual","$1,788/yr")], "Memberships", "WSD")
+        simple_table([("Robe Rental","$10"),("Cabana Mon-Thu","$199"),("Cabana Sat","$299")], "Add-ons", "WSD")
 
     with col2:
-        np_table = {
-            day: {
-                "Sel 3hr": imhs_non_peak.get(day, {}).get("Select 3hr"),
-                "Sel All-Day": imhs_non_peak.get(day, {}).get("Select All-Day"),
-                "Pre 3hr": imhs_non_peak.get(day, {}).get("Premier 3hr"),
-                "Pre All-Day": imhs_non_peak.get(day, {}).get("Premier All-Day"),
-            }
-            for day in DAY_ORDER if day in imhs_non_peak
-        }
-        price_table(np_table, "Non-Peak Pricing", "IMHS")
-        pk_table = {
-            day: {
-                "Sel 3hr": imhs_peak.get(day, {}).get("Select 3hr"),
-                "Sel All-Day": imhs_peak.get(day, {}).get("Select All-Day"),
-                "Pre 3hr": imhs_peak.get(day, {}).get("Premier 3hr"),
-                "Pre All-Day": imhs_peak.get(day, {}).get("Premier All-Day"),
-            }
-            for day in DAY_ORDER if day in imhs_peak
-        }
-        price_table(pk_table, "Peak / Holiday Pricing", "IMHS")
+        imhs_p = C["IMHS"]["p"]; imhs_d = C["IMHS"]["dark"]
+        st.markdown(f"""<div style='background:linear-gradient(135deg,{imhs_d}55,{imhs_p}20);
+            border:1px solid {imhs_p}40;border-radius:12px;padding:14px 18px;margin-bottom:12px'>
+            <span style='font-size:11px;font-weight:700;color:{imhs_p};text-transform:uppercase;letter-spacing:1.5px'>IMHS</span>
+            <span style='font-size:15px;font-weight:700;color:#F8FAFC;margin-left:10px'>Glenwood Springs, CO</span>
+        </div>""", unsafe_allow_html=True)
+        np_t = {d: {"Sel 3hr": imhs_non_peak.get(d,{}).get("Select 3hr"),
+                    "Sel All-Day": imhs_non_peak.get(d,{}).get("Select All-Day"),
+                    "Pre 3hr": imhs_non_peak.get(d,{}).get("Premier 3hr"),
+                    "Pre All-Day": imhs_non_peak.get(d,{}).get("Premier All-Day")}
+                for d in DAY_ORDER if d in imhs_non_peak}
+        price_table(np_t, "Non-Peak Pricing", "IMHS")
+        pk_t = {d: {"Sel 3hr": imhs_peak.get(d,{}).get("Select 3hr"),
+                    "Sel All-Day": imhs_peak.get(d,{}).get("Select All-Day"),
+                    "Pre 3hr": imhs_peak.get(d,{}).get("Premier 3hr"),
+                    "Pre All-Day": imhs_peak.get(d,{}).get("Premier All-Day")}
+                for d in DAY_ORDER if d in imhs_peak}
+        price_table(pk_t, "Peak / Holiday Pricing", "IMHS")
 
     with col3:
+        zchs_p = C["ZCHS"]["p"]; zchs_d = C["ZCHS"]["dark"]
+        st.markdown(f"""<div style='background:linear-gradient(135deg,{zchs_d}55,{zchs_p}20);
+            border:1px solid {zchs_p}40;border-radius:12px;padding:14px 18px;margin-bottom:12px'>
+            <span style='font-size:11px;font-weight:700;color:{zchs_p};text-transform:uppercase;letter-spacing:1.5px'>ZCHS</span>
+            <span style='font-size:15px;font-weight:700;color:#F8FAFC;margin-left:10px'>Zion Canyon, UT</span>
+        </div>""", unsafe_allow_html=True)
         if zchs_current:
-            display = {p: {k: v if isinstance(v, (int, float)) else "—" for k, v in pr.items()}
-                       for p, pr in zchs_current.items()}
-            price_table(display, "Soak Pricing (Nov 2025)", "ZCHS")
-        simple_table([
-            ("Anytime Annual", "$1,499"),
-            ("Weekday Annual", "$920"),
-            ("Snowbird (3 mo)", "$499"),
-        ], "Memberships", "ZCHS")
-        simple_table([
-            ("Single Cabana (Mon-Thu)", "$149"),
-            ("Single Cabana (Fri-Sun)", "$249"),
-            ("Double Cabana (Mon-Thu)", "$199"),
-            ("Double Cabana (Fri-Sun)", "$299"),
-        ], "Add-ons", "ZCHS")
+            disp = {pr: {k: v if isinstance(v,(int,float)) else "—" for k,v in prc.items()} for pr,prc in zchs_current.items()}
+            price_table(disp, "Soak Pricing (Nov 2025)", "ZCHS")
+        simple_table([("Anytime Annual","$1,499"),("Weekday Annual","$920"),("Snowbird (3 mo)","$499")], "Memberships", "ZCHS")
+        simple_table([("Single Cabana Mon-Thu","$149"),("Single Cabana Fri-Sun","$249"),
+                      ("Double Cabana Mon-Thu","$199"),("Double Cabana Fri-Sun","$299")], "Add-ons", "ZCHS")
 
-    # comparison chart
-    st.markdown("""
-    <div style='margin:32px 0 16px 0;'>
-        <div style='font-size:18px;font-weight:700;color:#F8FAFC'>Comparable Entry Price</div>
-        <div style='font-size:13px;color:#64748B;margin-top:4px'>Standard soak — weekday vs weekend</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:32px'></div>", unsafe_allow_html=True)
+    st.markdown("""<div style='font-size:18px;font-weight:700;color:#F8FAFC;margin-bottom:4px'>Comparable Entry Price</div>
+    <div style='font-size:13px;color:#64748B;margin-bottom:16px'>Standard soak — weekday vs weekend</div>""", unsafe_allow_html=True)
 
-    wsd_p = C["WSD"]["p"]; imhs_p = C["IMHS"]["p"]; zchs_p = C["ZCHS"]["p"]
-    wsd_d = C["WSD"]["dark"]; imhs_d = C["IMHS"]["dark"]; zchs_d = C["ZCHS"]["dark"]
+    wsd_p=C["WSD"]["p"]; imhs_p=C["IMHS"]["p"]; zchs_p=C["ZCHS"]["p"]
+    wsd_d=C["WSD"]["dark"]; imhs_d=C["IMHS"]["dark"]; zchs_d=C["ZCHS"]["dark"]
 
     fig = go.Figure()
-    fig.add_trace(go.Bar(name="WSD Weekday", x=["WSD Dallas"], y=[85],
-        marker_color=wsd_p, text=["$85"], textposition="outside", textfont=dict(color=wsd_p)))
-    fig.add_trace(go.Bar(name="WSD Weekend", x=["WSD Dallas"], y=[105],
-        marker_color=wsd_d, text=["$105"], textposition="outside", textfont=dict(color=wsd_p)))
+    fig.add_trace(go.Bar(name="WSD Weekday", x=["WSD Dallas"], y=[85], marker_color=wsd_p,
+        text=["$85"], textposition="outside", textfont=dict(color=wsd_p)))
+    fig.add_trace(go.Bar(name="WSD Weekend", x=["WSD Dallas"], y=[105], marker_color=wsd_d,
+        text=["$105"], textposition="outside", textfont=dict(color=wsd_p)))
     fig.add_trace(go.Bar(name="IMHS Weekday", x=["IMHS Colorado"],
-        y=[imhs_non_peak.get("Mon", {}).get("Select All-Day", 0)],
-        marker_color=imhs_p, text=[f"${imhs_non_peak.get('Mon',{}).get('Select All-Day',0)}"],
+        y=[imhs_non_peak.get("Mon",{}).get("Select All-Day",0)], marker_color=imhs_p,
+        text=[f"${imhs_non_peak.get('Mon',{}).get('Select All-Day',0)}"],
         textposition="outside", textfont=dict(color=imhs_p)))
-    fig.add_trace(go.Bar(name="IMHS Weekend Peak",
-        x=["IMHS Colorado"], y=[imhs_peak.get("Sat", {}).get("Premier All-Day", 0)],
-        marker_color=imhs_d, text=[f"${imhs_peak.get('Sat',{}).get('Premier All-Day',0)}"],
+    fig.add_trace(go.Bar(name="IMHS Weekend Peak", x=["IMHS Colorado"],
+        y=[imhs_peak.get("Sat",{}).get("Premier All-Day",0)], marker_color=imhs_d,
+        text=[f"${imhs_peak.get('Sat',{}).get('Premier All-Day',0)}"],
         textposition="outside", textfont=dict(color=imhs_p)))
     fig.add_trace(go.Bar(name="ZCHS Weekday", x=["ZCHS Utah"],
-        y=[zchs_current.get("3hr Select (13+)", {}).get("Mon-Thu", 0)],
-        marker_color=zchs_p, text=[f"${zchs_current.get('3hr Select (13+)',{}).get('Mon-Thu',0)}"],
+        y=[zchs_current.get("3hr Select (13+)",{}).get("Mon-Thu",0)], marker_color=zchs_p,
+        text=[f"${zchs_current.get('3hr Select (13+)',{}).get('Mon-Thu',0)}"],
         textposition="outside", textfont=dict(color=zchs_p)))
     fig.add_trace(go.Bar(name="ZCHS Weekend", x=["ZCHS Utah"],
-        y=[zchs_current.get("3hr Select (13+)", {}).get("Fri/Sat/Sun", 0)],
-        marker_color=zchs_d, text=[f"${zchs_current.get('3hr Select (13+)',{}).get('Fri/Sat/Sun',0)}"],
+        y=[zchs_current.get("3hr Select (13+)",{}).get("Fri/Sat/Sun",0)], marker_color=zchs_d,
+        text=[f"${zchs_current.get('3hr Select (13+)',{}).get('Fri/Sat/Sun',0)}"],
         textposition="outside", textfont=dict(color=zchs_p)))
 
-    fig.update_layout(barmode="group", plot_bgcolor="#00000000", paper_bgcolor="#00000000",
-        font=dict(color="#94A3B8", family="Inter"), height=360,
-        legend=dict(orientation="h", y=-0.25, bgcolor="#00000000", font=dict(size=12)),
-        yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#64748B"), zeroline=False),
+    layout = base_chart()
+    layout.update(barmode="group", height=360,
         xaxis=dict(tickfont=dict(color="#94A3B8", size=13)),
-        margin=dict(t=30, b=60, l=10, r=10),
-        bargap=0.3, bargroupgap=0.08,
-    )
+        bargap=0.3, bargroupgap=0.08)
+    fig.update_layout(**layout)
     st.plotly_chart(fig, use_container_width=True)
 
 
@@ -569,9 +522,9 @@ elif "WSD" in page:
     wsd_current, wsd_hist, wsd_spa = load_wsd()
     p = C["WSD"]["p"]; light = C["WSD"]["light"]
 
-    banner("Worldsprings Dallas", "WSD — Dallas, TX  ·  2026 Pricing", "WSD", "🌊")
+    banner("Worldsprings Dallas", "WSD — Dallas, TX  ·  2026 Pricing", "WSD", "💧")
 
-    tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Price History  ", "  Spa Menu  "])
+    tab1, tab2, tab3, tab4 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History  ", "  Spa Menu  "])
 
     with tab1:
         col1, col2 = st.columns(2)
@@ -598,38 +551,70 @@ elif "WSD" in page:
             ], "Complimentary Classes", "WSD")
 
     with tab2:
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day of Week — WSD 2026</div>", unsafe_allow_html=True)
+        # WSD has 3 tiers: Mon-Thu, Fri&Sun, Sat → map to each day
+        days_full = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        day_tier  = ["Mon-Thu","Mon-Thu","Mon-Thu","Mon-Thu","Fri & Sun","Saturday","Fri & Sun"]
+        day_pass_by_day  = [wsd_current["Day Pass"][t] for t in day_tier]
+        evening_by_day   = [wsd_current["Evening Pass"][t] for t in day_tier]
+
+        colors_day = [p if t=="Mon-Thu" else (C["WSD"]["dark"] if t=="Saturday" else C["WSD"]["light"]) for t in day_tier]
+
+        fig = go.Figure()
+        fig.add_trace(go.Bar(name="Day Pass", x=days_full, y=day_pass_by_day,
+            marker_color=colors_day, text=[f"${v}" for v in day_pass_by_day],
+            textposition="outside", textfont=dict(color="#94A3B8")))
+        fig.add_trace(go.Bar(name="Evening Pass", x=days_full, y=evening_by_day,
+            marker_color=[c + "99" for c in colors_day],
+            text=[f"${v}" for v in evening_by_day],
+            textposition="outside", textfont=dict(color="#64748B")))
+
+        layout = base_chart()
+        layout.update(barmode="group", height=400,
+            annotations=[
+                dict(x=1.5, y=max(day_pass_by_day)+12, text="Mon–Thu", showarrow=False,
+                     font=dict(color=p, size=11)),
+                dict(x=4,   y=max(day_pass_by_day)+12, text="Fri & Sun", showarrow=False,
+                     font=dict(color=C["WSD"]["light"], size=11)),
+                dict(x=5,   y=max(day_pass_by_day)+12, text="Saturday", showarrow=False,
+                     font=dict(color=C["WSD"]["dark"], size=11)),
+            ])
+        fig.update_layout(**layout)
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Color indicates pricing tier: celeste = Mon-Thu · light blue = Fri & Sun · dark blue = Saturday")
+
+    with tab3:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Soak Price History</div>", unsafe_allow_html=True)
         st.caption("WSD launched mid-2024. 2026 rates reflect restructured product names.")
 
-        day_pass = wsd_hist[wsd_hist["Product"].isin(["3 Hour Soak", "Day Pass"])].copy()
-        evening  = wsd_hist[wsd_hist["Product"] == "Quick Dip / Evening"].copy()
+        day_pass_h = wsd_hist[wsd_hist["Product"].isin(["3 Hour Soak", "Day Pass"])].copy()
+        evening_h  = wsd_hist[wsd_hist["Product"] == "Quick Dip / Evening"].copy()
 
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=day_pass["Period"], y=day_pass["Mon-Thu"],
+        fig.add_trace(go.Scatter(x=day_pass_h["Period"], y=day_pass_h["Mon-Thu"],
             mode="lines+markers", name="Day Pass (Mon-Thu)",
             line=dict(color=p, width=3), marker=dict(size=9, color=p)))
-        fig.add_trace(go.Scatter(x=day_pass["Period"], y=day_pass["Fri-Sun"],
+        fig.add_trace(go.Scatter(x=day_pass_h["Period"], y=day_pass_h["Fri-Sun"],
             mode="lines+markers", name="Day Pass (Fri-Sun)",
             line=dict(color=p, width=3, dash="dot"), marker=dict(size=9, color=p)))
-        fig.add_trace(go.Scatter(x=evening["Period"], y=evening["Mon-Thu"],
+        fig.add_trace(go.Scatter(x=evening_h["Period"], y=evening_h["Mon-Thu"],
             mode="lines+markers", name="Evening (Mon-Thu)",
-            line=dict(color=C["WSD"]["light"], width=2), marker=dict(size=8, color=C["WSD"]["light"])))
-        fig.add_trace(go.Scatter(x=evening["Period"], y=evening["Fri-Sun"],
+            line=dict(color=light, width=2), marker=dict(size=8, color=light)))
+        fig.add_trace(go.Scatter(x=evening_h["Period"], y=evening_h["Fri-Sun"],
             mode="lines+markers", name="Evening (Fri-Sun)",
-            line=dict(color=C["WSD"]["light"], width=2, dash="dot"), marker=dict(size=8, color=C["WSD"]["light"])))
+            line=dict(color=light, width=2, dash="dot"), marker=dict(size=8, color=light)))
 
         chart_layout(fig, "WSD")
         st.plotly_chart(fig, use_container_width=True)
         st.dataframe(wsd_hist.set_index("Period"), use_container_width=True)
 
-    with tab3:
+    with tab4:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Spa Services — 2026 Rates</div>", unsafe_allow_html=True)
         st.caption("All 50-min services include Day Pass & robe unless noted.")
         if not wsd_spa.empty:
             disp = wsd_spa.copy()
-            for col in ["Mon-Thu", "Fri & Sun", "Saturday"]:
-                disp[col] = disp[col].apply(
-                    lambda v: f"${v:,.0f}" if isinstance(v, (int, float)) else (str(v) if v else "—"))
+            for c in ["Mon-Thu", "Fri & Sun", "Saturday"]:
+                disp[c] = disp[c].apply(lambda v: f"${v:,.0f}" if isinstance(v,(int,float)) else (str(v) if v else "—"))
             st.dataframe(disp.set_index("Service"), use_container_width=True)
 
 
@@ -643,33 +628,24 @@ elif "IMHS" in page:
 
     banner("Iron Mountain Hot Springs", "IMHS — Glenwood Springs, CO  ·  Current Pricing", "IMHS", "🏔️")
 
-    tab1, tab2 = st.tabs(["  Current Rates  ", "  Price History (2015–Present)  "])
+    tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History (2015–Present)  "])
 
     with tab1:
         col1, col2 = st.columns(2)
         with col1:
-            np_data = {
-                day: {
-                    "Select 3hr": imhs_non_peak[day]["Select 3hr"],
-                    "Select All-Day": imhs_non_peak[day]["Select All-Day"],
-                    "Premier 3hr": imhs_non_peak[day]["Premier 3hr"],
-                    "Premier All-Day": imhs_non_peak[day]["Premier All-Day"],
-                }
-                for day in DAY_ORDER if day in imhs_non_peak
-            }
+            np_data = {d: {"Select 3hr": imhs_non_peak[d]["Select 3hr"],
+                           "Select All-Day": imhs_non_peak[d]["Select All-Day"],
+                           "Premier 3hr": imhs_non_peak[d]["Premier 3hr"],
+                           "Premier All-Day": imhs_non_peak[d]["Premier All-Day"]}
+                       for d in DAY_ORDER if d in imhs_non_peak}
             price_table(np_data, "Non-Peak Pricing", "IMHS")
         with col2:
-            pk_data = {
-                day: {
-                    "Select 3hr": imhs_peak[day]["Select 3hr"],
-                    "Select All-Day": imhs_peak[day]["Select All-Day"],
-                    "Premier 3hr": imhs_peak[day]["Premier 3hr"],
-                    "Premier All-Day": imhs_peak[day]["Premier All-Day"],
-                }
-                for day in DAY_ORDER if day in imhs_peak
-            }
+            pk_data = {d: {"Select 3hr": imhs_peak[d]["Select 3hr"],
+                           "Select All-Day": imhs_peak[d]["Select All-Day"],
+                           "Premier 3hr": imhs_peak[d]["Premier 3hr"],
+                           "Premier All-Day": imhs_peak[d]["Premier All-Day"]}
+                       for d in DAY_ORDER if d in imhs_peak}
             price_table(pk_data, "Peak / Holiday Pricing", "IMHS")
-
         simple_table([
             ("Select 3hr", "3-hour timed soak · select pools"),
             ("Select All-Day", "Unlimited duration · select pools"),
@@ -678,13 +654,37 @@ elif "IMHS" in page:
         ], "Product Tiers", "IMHS")
 
     with tab2:
-        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Price History — 2015 to Present</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day of Week — IMHS (current period)</div>", unsafe_allow_html=True)
+
+        section_sel = st.radio("Pricing season", ["Non-Peak", "Peak / Holiday"], horizontal=True, label_visibility="collapsed")
+        data_src = imhs_non_peak if section_sel == "Non-Peak" else imhs_peak
+
+        days_avail = [d for d in DAY_ORDER if d in data_src]
+        metrics_imhs = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
+        colors_imhs4 = [p, light, "#22c55e", "#86efac"]
+
+        fig = go.Figure()
+        for metric, color in zip(metrics_imhs, colors_imhs4):
+            vals = [data_src[d][metric] for d in days_avail]
+            fig.add_trace(go.Bar(name=metric, x=days_avail, y=vals,
+                marker_color=color,
+                text=[f"${v}" for v in vals], textposition="outside",
+                textfont=dict(color=color, size=11)))
+
+        layout = base_chart()
+        layout.update(barmode="group", height=430, bargap=0.2, bargroupgap=0.06)
+        fig.update_layout(**layout)
+        st.plotly_chart(fig, use_container_width=True)
+        st.caption("Shows how pricing varies across days of the week within the current pricing period.")
+
+    with tab3:
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — 2015 to Present</div>", unsafe_allow_html=True)
 
         if not imhs_hist.empty:
-            type_filter = st.selectbox("Day type", options=imhs_hist["Type"].unique().tolist())
+            type_filter = st.selectbox("Select day type", options=imhs_hist["Type"].unique().tolist(), label_visibility="visible")
             filtered = imhs_hist[imhs_hist["Type"] == type_filter].copy()
 
-            colors_imhs = [C["IMHS"]["p"], C["IMHS"]["light"], "#22c55e", "#86efac"]
+            colors_imhs = [p, light, "#22c55e", "#86efac"]
             metrics = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
 
             fig = go.Figure()
@@ -693,8 +693,7 @@ elif "IMHS" in page:
                 if not df_m.empty:
                     fig.add_trace(go.Scatter(x=df_m["Period"], y=df_m[metric],
                         mode="lines+markers", name=metric,
-                        line=dict(color=color, width=2),
-                        marker=dict(size=8, color=color)))
+                        line=dict(color=color, width=2), marker=dict(size=8, color=color)))
 
             chart_layout(fig, "IMHS", height=440)
             st.plotly_chart(fig, use_container_width=True)
@@ -712,45 +711,62 @@ elif "ZCHS" in page:
 
     banner("Zion Canyon Hot Springs", "ZCHS — Zion Canyon, UT  ·  Nov 2025 Pricing", "ZCHS", "🏜️")
 
-    tab1, tab2 = st.tabs(["  Current Rates  ", "  Price History  "])
+    tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History  "])
 
     with tab1:
         col1, col2 = st.columns(2)
         with col1:
             if zchs_current:
-                display = {pr: {k: v if isinstance(v, (int, float)) else "—" for k, v in prc.items()}
-                           for pr, prc in zchs_current.items()}
-                price_table(display, "Soak Pricing (Nov 2025)", "ZCHS")
+                disp = {pr: {k: v if isinstance(v,(int,float)) else "—" for k,v in prc.items()} for pr,prc in zchs_current.items()}
+                price_table(disp, "Soak Pricing (Nov 2025)", "ZCHS")
         with col2:
-            simple_table([
-                ("Anytime Annual", "$1,499"),
-                ("Weekday Annual (M-F)", "$920"),
-                ("Snowbird (3 months)", "$499"),
-            ], "Memberships", "ZCHS")
-            simple_table([
-                ("Robe", "$10"),
-                ("Single Cabana (Mon-Thu)", "$149"),
-                ("Single Cabana (Fri-Sun)", "$249"),
-                ("Double Cabana (Mon-Thu)", "$199"),
-                ("Double Cabana (Fri-Sun)", "$299"),
-            ], "Add-ons", "ZCHS")
-            simple_table([
-                ("Washington County Residents", "20% off"),
-                ("Hotel Partner Rate", "10% off"),
-            ], "Special Rates", "ZCHS")
-
-        simple_table([
-            ("Select (13+)", "Standard pools · teens & adults"),
-            ("Select Youth (3–12)", "Standard pools · children"),
-            ("Premier (21+)", "All pools including 21+ only areas"),
-        ], "Access Tiers", "ZCHS")
+            simple_table([("Anytime Annual","$1,499"),("Weekday Annual (M-F)","$920"),("Snowbird (3 months)","$499")], "Memberships", "ZCHS")
+            simple_table([("Robe","$10"),("Single Cabana Mon-Thu","$149"),("Single Cabana Fri-Sun","$249"),
+                          ("Double Cabana Mon-Thu","$199"),("Double Cabana Fri-Sun","$299")], "Add-ons", "ZCHS")
+            simple_table([("Washington County Residents","20% off"),("Hotel Partner Rate","10% off")], "Special Rates", "ZCHS")
+        simple_table([("Select (13+)","Standard pools · teens & adults"),
+                      ("Select Youth (3–12)","Standard pools · children"),
+                      ("Premier (21+)","All pools including 21+ only areas")], "Access Tiers", "ZCHS")
 
     with tab2:
-        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Price History — Since Opening</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:16px'>Price by Day Type — ZCHS (Nov 2025)</div>", unsafe_allow_html=True)
+
+        if zchs_current:
+            products  = list(zchs_current.keys())
+            wkday_vals = [zchs_current[pr].get("Mon-Thu",0) for pr in products]
+            wkend_vals = [zchs_current[pr].get("Fri/Sat/Sun",0) for pr in products]
+            pct_diff   = [round((w-d)/d*100,1) if d else 0 for d,w in zip(wkday_vals, wkend_vals)]
+
+            fig = go.Figure()
+            fig.add_trace(go.Bar(name="Mon–Thu", x=products, y=wkday_vals, marker_color=p,
+                text=[f"${v}" for v in wkday_vals], textposition="outside", textfont=dict(color=p)))
+            fig.add_trace(go.Bar(name="Fri / Sat / Sun", x=products, y=wkend_vals,
+                marker_color=C["ZCHS"]["dark"],
+                text=[f"${v}" for v in wkend_vals], textposition="outside", textfont=dict(color=light)))
+
+            layout = base_chart()
+            layout.update(barmode="group", height=430, bargap=0.25, bargroupgap=0.08,
+                xaxis=dict(tickfont=dict(color="#94A3B8", size=11), tickangle=-20))
+            fig.update_layout(**layout)
+            st.plotly_chart(fig, use_container_width=True)
+
+            # weekend premium callouts
+            st.markdown(f"<div style='font-size:13px;font-weight:600;color:{p};margin-top:4px;margin-bottom:8px'>Weekend premium by product</div>", unsafe_allow_html=True)
+            cols = st.columns(len(products))
+            for i, (pr, pct) in enumerate(zip(products, pct_diff)):
+                with cols[i]:
+                    st.markdown(f"""<div style='background:{C["ZCHS"]["dark"]}33;border:1px solid {p}30;border-radius:8px;
+                        padding:10px;text-align:center'>
+                        <div style='font-size:11px;color:#64748B;margin-bottom:4px'>{pr}</div>
+                        <div style='font-size:20px;font-weight:700;color:{p}'>+{pct}%</div>
+                    </div>""", unsafe_allow_html=True)
+
+    with tab3:
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — Since Opening</div>", unsafe_allow_html=True)
         st.caption("ZCHS opened January 2025. Three pricing periods captured.")
 
         if not zchs_hist.empty:
-            product_filter = st.selectbox("Product", options=zchs_hist["Product"].unique().tolist())
+            product_filter = st.selectbox("Product", options=zchs_hist["Product"].unique().tolist(), label_visibility="visible")
             filtered = zchs_hist[zchs_hist["Product"] == product_filter]
 
             fig = go.Figure()
@@ -759,15 +775,11 @@ elif "ZCHS" in page:
                 textposition="outside", textfont=dict(color=p)))
             fig.add_trace(go.Bar(name="Fri/Sat/Sun", x=filtered["Period"], y=filtered["Fri/Sat/Sun"],
                 marker_color=C["ZCHS"]["dark"], text=filtered["Fri/Sat/Sun"].apply(lambda v: f"${v}" if pd.notna(v) else ""),
-                textposition="outside", textfont=dict(color=p)))
+                textposition="outside", textfont=dict(color=light)))
 
-            fig.update_layout(barmode="group", plot_bgcolor="#00000000", paper_bgcolor="#00000000",
-                font=dict(color="#94A3B8", family="Inter"), height=400,
-                legend=dict(orientation="h", y=-0.25, bgcolor="#00000000"),
-                yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#64748B"), zeroline=False),
-                xaxis=dict(tickfont=dict(color="#94A3B8")),
-                margin=dict(t=30, b=60, l=10, r=10), bargap=0.35,
-            )
+            layout = base_chart()
+            layout.update(barmode="group", height=400, bargap=0.35)
+            fig.update_layout(**layout)
             st.plotly_chart(fig, use_container_width=True)
             st.dataframe(filtered.set_index("Period"), use_container_width=True)
         else:
