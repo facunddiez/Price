@@ -319,45 +319,89 @@ def load_imhs():
         except Exception:
             return None
 
+    # Old-format side-by-side headers
+    NP_HEADERS = {"regular week", "regular pricing", "non-peak week", "non peak week"}
+    PK_HEADERS = {"holiday week", "peak week", "holiday / peak week", "holiday/peak week",
+                  "holiday & peak week", "peak / holiday week"}
+
     def _extract_all_days(ws_h):
-        """Return (np_days, pk_days, debug_rows) — dicts of {day: {Select 3hr, ...}}."""
-        sec = None
+        """Handle two layouts:
+        - OLD: 'Regular Week' / 'Holiday Week' side-by-side (same rows, different columns)
+        - NEW: 'Non-Peak Pricing' / 'Holiday/Peak Pricing' stacked vertically (column C)
+        """
         np_days, pk_days = {}, {}
-        debug_rows = []  # first few rows near section markers for diagnostics
-        for row in ws_h.iter_rows(values_only=True):
-            # Scan every cell for section marker
-            found_marker = False
-            for val in row:
-                sv = str(val).strip().lower() if val is not None else ""
-                if sv in NP_MARKERS:
-                    sec = "non_peak"; found_marker = True
-                    debug_rows.append(f"NP marker found: {list(row[:8])}")
-                    break
-                elif sv in PK_MARKERS:
-                    sec = "peak"; found_marker = True
-                    debug_rows.append(f"PK marker found: {list(row[:8])}")
-                    break
-            if found_marker or sec is None:
-                continue
-            # Find a day label in any column, read 4 values to its right
+        debug_rows = []
+        all_rows = list(ws_h.iter_rows(values_only=True))
+
+        # ── Detect OLD side-by-side format ────────────────────────────────────
+        np_lc = pk_lc = None   # label column index for each section
+        for row in all_rows[:20]:
             for ci, val in enumerate(row):
-                if val in DAY_SET:
-                    debug_rows.append(f"  Day '{val}' at col {ci}: next4={list(row[ci+1:ci+5])}")
+                sv = str(val).strip().lower() if val is not None else ""
+                if sv in NP_HEADERS and np_lc is None:
+                    np_lc = ci
+                    debug_rows.append(f"OLD-format NP header '{val}' at col {ci}")
+                elif sv in PK_HEADERS and pk_lc is None:
+                    pk_lc = ci
+                    debug_rows.append(f"OLD-format PK header '{val}' at col {ci}")
+            if np_lc is not None or pk_lc is not None:
+                break
+
+        if np_lc is not None or pk_lc is not None:
+            # Side-by-side: each row has a day in label column, data in next 4 cols
+            for row in all_rows:
+                for lc, dest, label in [(np_lc, np_days, "NP"), (pk_lc, pk_days, "PK")]:
+                    if lc is None or lc >= len(row):
+                        continue
+                    day = row[lc]
+                    if day not in DAY_SET:
+                        continue
                     try:
-                        v1 = _to_num(row[ci+1])
-                        v2 = _to_num(row[ci+2])
-                        v3 = _to_num(row[ci+3])
-                        v4 = _to_num(row[ci+4])
-                        if v1 is not None:
-                            entry = {"Select 3hr": v1, "Select All-Day": v2,
-                                     "Premier 3hr": v3, "Premier All-Day": v4}
-                            if sec == "non_peak" and val not in np_days:
-                                np_days[val] = entry
-                            elif sec == "peak" and val not in pk_days:
-                                pk_days[val] = entry
-                    except Exception:
-                        pass
-                    break
+                        v1 = _to_num(row[lc + 1])
+                        v2 = _to_num(row[lc + 2])
+                        v3 = _to_num(row[lc + 3])
+                        v4 = _to_num(row[lc + 4])
+                        if v1 is not None and day not in dest:
+                            dest[day] = {"Select 3hr": v1, "Select All-Day": v2,
+                                         "Premier 3hr": v3, "Premier All-Day": v4}
+                            debug_rows.append(f"{label} {day}: {v1},{v2},{v3},{v4}")
+                    except Exception as e:
+                        debug_rows.append(f"{label} {day} error: {e}")
+        else:
+            # ── NEW vertical format ───────────────────────────────────────────
+            sec = None
+            for row in all_rows:
+                found_marker = False
+                for val in row:
+                    sv = str(val).strip().lower() if val is not None else ""
+                    if sv in NP_MARKERS:
+                        sec = "non_peak"; found_marker = True
+                        debug_rows.append(f"NEW-format NP marker: {list(row[:8])}")
+                        break
+                    elif sv in PK_MARKERS:
+                        sec = "peak"; found_marker = True
+                        debug_rows.append(f"NEW-format PK marker: {list(row[:8])}")
+                        break
+                if found_marker or sec is None:
+                    continue
+                for ci, val in enumerate(row):
+                    if val in DAY_SET:
+                        try:
+                            v1 = _to_num(row[ci + 1])
+                            v2 = _to_num(row[ci + 2])
+                            v3 = _to_num(row[ci + 3])
+                            v4 = _to_num(row[ci + 4])
+                            if v1 is not None:
+                                entry = {"Select 3hr": v1, "Select All-Day": v2,
+                                         "Premier 3hr": v3, "Premier All-Day": v4}
+                                if sec == "non_peak" and val not in np_days:
+                                    np_days[val] = entry
+                                elif sec == "peak" and val not in pk_days:
+                                    pk_days[val] = entry
+                        except Exception:
+                            pass
+                        break
+
         return np_days, pk_days, debug_rows
 
     pricing_sheets_ordered = []
