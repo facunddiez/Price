@@ -808,7 +808,41 @@ elif "WSD" in page:
 
         chart_layout(fig, "WSD")
         st.plotly_chart(fig, use_container_width=True)
+
+        st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:8px 0 8px'>Price Table by Period</div>", unsafe_allow_html=True)
         st.dataframe(wsd_hist.set_index("Period"), use_container_width=True)
+
+        # ── Bar chart per period ───────────────────────────────────────────────
+        st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — Key Products</div>", unsafe_allow_html=True)
+        day_sel_wsd = st.radio("Price type", ["Mon-Thu", "Fri-Sun"], horizontal=True, key="wsd_hist_tier")
+
+        key_products_wsd = ["Day Pass", "Quick Dip / Evening"]
+        prod_colors_wsd  = [p, C["WSD"]["light"]]
+        periods_order_wsd = wsd_hist["Period"].unique().tolist()
+
+        # Unify "3 Hour Soak" → "Day Pass" for display
+        wsd_bar = wsd_hist.copy()
+        wsd_bar["Product"] = wsd_bar["Product"].replace("3 Hour Soak", "Day Pass")
+
+        fig_bar = go.Figure()
+        for prod, col in zip(key_products_wsd, prod_colors_wsd):
+            df_p = wsd_bar[wsd_bar["Product"] == prod].copy()
+            df_p["Period"] = pd.Categorical(df_p["Period"], categories=periods_order_wsd, ordered=True)
+            df_p = df_p.drop_duplicates("Period").set_index("Period").reindex(periods_order_wsd).reset_index()
+            fig_bar.add_trace(go.Bar(
+                name=prod, x=df_p["Period"], y=df_p[day_sel_wsd],
+                marker_color=col,
+                text=df_p[day_sel_wsd].apply(lambda v: f"${v:.0f}" if pd.notna(v) else ""),
+                textposition="outside", textfont=dict(color="#FFFFFF", size=11)
+            ))
+        layout_b = base_chart()
+        layout_b.update(barmode="group", height=400, bargap=0.2, bargroupgap=0.08,
+            xaxis=dict(tickfont=dict(color="#FFFFFF", size=11)),
+            yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
+            legend=dict(font=dict(color="#FFFFFF", size=11)),
+        )
+        fig_bar.update_layout(**layout_b)
+        st.plotly_chart(fig_bar, use_container_width=True)
 
 
 
