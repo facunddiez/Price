@@ -362,7 +362,16 @@ def load_imhs():
                 hist_records.append({"Period": yr, "Date": f"6.1.{yr}", "Type": "Peak (Legacy Adult)",
                     "Select 3hr": val, "Select All-Day": val, "Premier 3hr": None, "Premier All-Day": None})
 
-    return non_peak, peak, pd.DataFrame(hist_records)
+    # Build debug report: all sheets + what was found
+    debug_lines = ["**All sheets in workbook:**"]
+    for sname in wb.sheetnames:
+        detected = any(r["Period"] == (_try_parse_start(sname) and f"{_try_parse_start(sname).month}.{_try_parse_start(sname).day}.{str(_try_parse_start(sname).year)[2:]}") for r in hist_records) if hist_records else False
+        found_np = any(r["Period"] and r["Type"] == "Non-Peak Mon" for r in hist_records if r.get("Date", "").replace(".", "") in sname.replace(".", "").replace(" ", "").replace("-", ""))
+        debug_lines.append(f"- `{sname}`")
+    debug_lines.append(f"\n**Total pricing records found:** {len(hist_records)}")
+    debug_lines.append(f"**Periods detected:** {sorted(set(r['Period'] for r in hist_records))}")
+
+    return non_peak, peak, pd.DataFrame(hist_records), "\n".join(debug_lines)
 
 
 @st.cache_data
@@ -481,7 +490,7 @@ def base_chart():
 # ══════════════════════════════════════════════════════════════════════════════
 if "Overview" in page:
     wsd_current, _, _ = load_wsd()
-    imhs_non_peak, imhs_peak, _ = load_imhs()
+    imhs_non_peak, imhs_peak, _, _dbg = load_imhs()
     zchs_current, _ = load_zchs()
 
     st.markdown("""
@@ -754,10 +763,13 @@ elif "WSD" in page:
 # ══════════════════════════════════════════════════════════════════════════════
 elif "IMHS" in page:
     inject_page_bg("IMHS")
-    imhs_non_peak, imhs_peak, imhs_hist = load_imhs()
+    imhs_non_peak, imhs_peak, imhs_hist, _imhs_debug = load_imhs()
     p = C["IMHS"]["p"]; light = C["IMHS"]["light"]
 
     banner("Iron Mountain Hot Springs", "IMHS — Glenwood Springs, CO  ·  Current Pricing", "IMHS", "🏔️")
+
+    with st.expander("🔍 Debug: Sheet Detection (remove after fix)"):
+        st.markdown(_imhs_debug)
 
     tab1, tab2, tab3 = st.tabs(["  Current Rates  ", "  Pricing by Day  ", "  Price History (2015–Present)  "])
 
