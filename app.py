@@ -244,21 +244,20 @@ def load_wsd():
                 pass
 
     history = []
-    periods = [
-        ("Jul-Sep 2024", "3 Hour Soak", 55, 75),
+    for label, prod, mth, frs in [
+        ("Jul-Sep 2024", "3 Hour Soak", 55, 55),
         ("Oct-Jan 2025", "3 Hour Soak", 59, 85),
         ("Feb-May 2025", "3 Hour Soak", 49, 69),
         ("Jun-Dec 2025", "3 Hour Soak", 69, 79),
         ("Jan-Feb 2026", "Day Pass",    85, 95),
-    ]
-    for label, prod, mth, frs in periods:
+    ]:
         history.append({"Period": label, "Product": prod, "Mon-Thu": mth, "Fri-Sun": frs})
     for label, mth, frs in [
         ("Jul-Sep 2024", 35, 35), ("Oct-Jan 2025", 39, 39),
         ("Feb-May 2025", 39, 39), ("Jun-Dec 2025", 49, 59),
-        ("Jan-Feb 2026", 55, 65),
     ]:
-        history.append({"Period": label, "Product": "Quick Dip / Evening", "Mon-Thu": mth, "Fri-Sun": frs})
+        history.append({"Period": label, "Product": "Quick Dip", "Mon-Thu": mth, "Fri-Sun": frs})
+    history.append({"Period": "Jan-Feb 2026", "Product": "Evening Pass", "Mon-Thu": 55, "Fri-Sun": 65})
 
     return current, pd.DataFrame(history), pd.DataFrame(spa_current)
 
@@ -789,8 +788,9 @@ elif "WSD" in page:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:4px'>Soak Price History</div>", unsafe_allow_html=True)
         st.caption("WSD launched mid-2024. 2026 rates reflect restructured product names.")
 
-        day_pass_h = wsd_hist[wsd_hist["Product"].isin(["3 Hour Soak", "Day Pass"])].copy()
-        evening_h  = wsd_hist[wsd_hist["Product"] == "Quick Dip / Evening"].copy()
+        day_pass_h  = wsd_hist[wsd_hist["Product"].isin(["3 Hour Soak", "Day Pass"])].copy()
+        quick_dip_h = wsd_hist[wsd_hist["Product"] == "Quick Dip"].copy()
+        evening_h   = wsd_hist[wsd_hist["Product"] == "Evening Pass"].copy()
 
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=day_pass_h["Period"], y=day_pass_h["Mon-Thu"],
@@ -799,12 +799,18 @@ elif "WSD" in page:
         fig.add_trace(go.Scatter(x=day_pass_h["Period"], y=day_pass_h["Fri-Sun"],
             mode="lines+markers", name="Day Pass (Fri-Sun)",
             line=dict(color=p, width=3, dash="dot"), marker=dict(size=9, color=p)))
-        fig.add_trace(go.Scatter(x=evening_h["Period"], y=evening_h["Mon-Thu"],
-            mode="lines+markers", name="Evening (Mon-Thu)",
+        fig.add_trace(go.Scatter(x=quick_dip_h["Period"], y=quick_dip_h["Mon-Thu"],
+            mode="lines+markers", name="Quick Dip (Mon-Thu)",
             line=dict(color=light, width=2), marker=dict(size=8, color=light)))
-        fig.add_trace(go.Scatter(x=evening_h["Period"], y=evening_h["Fri-Sun"],
-            mode="lines+markers", name="Evening (Fri-Sun)",
+        fig.add_trace(go.Scatter(x=quick_dip_h["Period"], y=quick_dip_h["Fri-Sun"],
+            mode="lines+markers", name="Quick Dip (Fri-Sun)",
             line=dict(color=light, width=2, dash="dot"), marker=dict(size=8, color=light)))
+        fig.add_trace(go.Scatter(x=evening_h["Period"], y=evening_h["Mon-Thu"],
+            mode="lines+markers", name="Evening Pass (Mon-Thu)",
+            line=dict(color=C["WSD"]["dark"], width=2), marker=dict(size=8, color=C["WSD"]["dark"])))
+        fig.add_trace(go.Scatter(x=evening_h["Period"], y=evening_h["Fri-Sun"],
+            mode="lines+markers", name="Evening Pass (Fri-Sun)",
+            line=dict(color=C["WSD"]["dark"], width=2, dash="dot"), marker=dict(size=8, color=C["WSD"]["dark"])))
 
         chart_layout(fig, "WSD")
         st.plotly_chart(fig, use_container_width=True)
@@ -816,11 +822,10 @@ elif "WSD" in page:
         st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — Key Products</div>", unsafe_allow_html=True)
         day_sel_wsd = st.radio("Price type", ["Mon-Thu", "Fri-Sun"], horizontal=True, key="wsd_hist_tier")
 
-        key_products_wsd = ["Day Pass", "Quick Dip / Evening"]
-        prod_colors_wsd  = [p, C["WSD"]["light"]]
+        key_products_wsd = ["Day Pass", "Quick Dip", "Evening Pass"]
+        prod_colors_wsd  = [p, C["WSD"]["light"], C["WSD"]["dark"]]
         periods_order_wsd = wsd_hist["Period"].unique().tolist()
 
-        # Unify "3 Hour Soak" → "Day Pass" for display
         wsd_bar = wsd_hist.copy()
         wsd_bar["Product"] = wsd_bar["Product"].replace("3 Hour Soak", "Day Pass")
 
