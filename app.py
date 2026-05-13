@@ -782,27 +782,99 @@ elif "IMHS" in page:
         st.caption("Shows how pricing varies across days of the week within the current pricing period.")
 
     with tab3:
-        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — 2015 to Present</div>", unsafe_allow_html=True)
+        st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — 2022 to Present</div>", unsafe_allow_html=True)
 
         if not imhs_hist.empty:
-            type_filter = st.selectbox("Select day type", options=imhs_hist["Type"].unique().tolist(), label_visibility="visible")
-            filtered = imhs_hist[imhs_hist["Type"] == type_filter].copy()
+            def _parse_dt(s):
+                try:
+                    p = s.strip().split(".")
+                    return pd.Timestamp(f"{p[2]}-{int(p[0]):02d}-{int(p[1]):02d}")
+                except Exception:
+                    return pd.NaT
 
-            colors_imhs = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
-            metrics = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
+            metrics_imhs  = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
+            colors_imhs4  = ["#4ADE80", "#22D3EE", "#FBBF24", "#F97316"]
 
-            fig = go.Figure()
-            for metric, color in zip(metrics, colors_imhs):
-                df_m = filtered.dropna(subset=[metric])
-                if not df_m.empty:
-                    fig.add_trace(go.Scatter(x=df_m["Period"], y=df_m[metric],
-                        mode="lines+markers", name=metric,
-                        line=dict(color=color, width=2), marker=dict(size=8, color=color)))
+            # Work with Non-Peak Mon and Peak Sat (skip legacy)
+            np_hist = imhs_hist[imhs_hist["Type"] == "Non-Peak Mon"].copy()
+            pk_hist = imhs_hist[imhs_hist["Type"] == "Peak Sat"].copy()
+            for df in (np_hist, pk_hist):
+                df["Date_ts"] = df["Date"].apply(_parse_dt)
 
-            chart_layout(fig, "IMHS", height=440)
-            st.plotly_chart(fig, use_container_width=True)
-            st.caption("Pre-2022: legacy 'Everyday Adult' rate (no Select/Premier split).")
-            st.dataframe(filtered.set_index("Period"), use_container_width=True)
+            # Extend last period to end date (5.31.2026)
+            end_ts = pd.Timestamp("2026-05-31")
+            for df in (np_hist, pk_hist):
+                last = df.loc[df["Date_ts"].idxmax()].copy()
+                last["Period"] = "5.31.26"; last["Date_ts"] = end_ts
+                df_ext = pd.DataFrame([last])
+                df.update(df)  # no-op, just to keep ref
+            np_ext = pd.concat([np_hist, pd.DataFrame([
+                {**np_hist.loc[np_hist["Date_ts"].idxmax()].to_dict(), "Period": "5.31.26", "Date_ts": end_ts}
+            ])], ignore_index=True)
+            pk_ext = pd.concat([pk_hist, pd.DataFrame([
+                {**pk_hist.loc[pk_hist["Date_ts"].idxmax()].to_dict(), "Period": "5.31.26", "Date_ts": end_ts}
+            ])], ignore_index=True)
+
+            st.markdown("""<style>
+            div[data-testid="stRadio"] label {color:#FFFFFF !important; font-weight:600}
+            div[data-testid="stRadio"] label p {color:#FFFFFF !important}
+            </style>""", unsafe_allow_html=True)
+            day_sel = st.radio("Day type", ["Non-Peak Mon", "Peak Sat"], horizontal=True)
+            df_trend = np_ext if day_sel == "Non-Peak Mon" else pk_ext
+            df_trend = df_trend.sort_values("Date_ts")
+
+            # ── Trendline ─────────────────────────────────────────────────────
+            fig_trend = go.Figure()
+            for metric, col in zip(metrics_imhs, colors_imhs4):
+                df_m = df_trend.dropna(subset=[metric])
+                if df_m.empty: continue
+                fig_trend.add_trace(go.Scatter(
+                    x=df_m["Date_ts"], y=df_m[metric],
+                    name=metric, mode="lines+markers",
+                    line=dict(color=col, width=2.5),
+                    marker=dict(size=8, color=col),
+                    hovertemplate=f"<b>{metric}</b><br>%{{x|%b %Y}}: $%{{y}}<extra></extra>"
+                ))
+            layout_t = base_chart()
+            layout_t.update(height=420,
+                xaxis=dict(tickformat="%b %Y", tickfont=dict(color="#FFFFFF", size=11)),
+                yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
+                legend=dict(font=dict(color="#FFFFFF", size=11)),
+                title=dict(text=f"Price Trend — {day_sel}", font=dict(color="#FFFFFF", size=14), x=0.5),
+            )
+            fig_trend.update_layout(**layout_t)
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+            # ── Scrollable table ──────────────────────────────────────────────
+            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price Table by Period</div>", unsafe_allow_html=True)
+            tbl = df_trend[df_trend["Period"] != "5.31.26"][["Period", "Date"] + metrics_imhs].copy()
+            tbl = tbl.sort_values("Date_ts").drop(columns=["Date_ts"], errors="ignore")
+            for m in metrics_imhs:
+                tbl[m] = tbl[m].apply(lambda v: f"${v:.0f}" if pd.notna(v) else "—")
+            st.dataframe(tbl.set_index("Period"), use_container_width=True, height=300)
+
+            # ── Bar chart per period ───────────────────────────────────────────
+            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — All Products</div>", unsafe_allow_html=True)
+            periods_ordered = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")["Period"].tolist()
+            fig_bar = go.Figure()
+            for metric, col in zip(metrics_imhs, colors_imhs4):
+                df_b = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")
+                fig_bar.add_trace(go.Bar(
+                    name=metric, x=df_b["Period"], y=df_b[metric],
+                    marker_color=col,
+                    text=df_b[metric].apply(lambda v: f"${v:.0f}" if pd.notna(v) else ""),
+                    textposition="outside", textfont=dict(color="#FFFFFF", size=10)
+                ))
+            layout_b = base_chart()
+            layout_b.update(barmode="group", height=450, bargap=0.15, bargroupgap=0.05,
+                xaxis=dict(tickfont=dict(color="#FFFFFF", size=10), tickangle=-30),
+                yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
+                legend=dict(font=dict(color="#FFFFFF", size=11)),
+            )
+            fig_bar.update_layout(**layout_b)
+            st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("No historical data parsed yet.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
