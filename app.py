@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import openpyxl
 from datetime import datetime
+import statistics
 import requests
 import io
 
@@ -325,16 +326,74 @@ def load_imhs():
                   "holiday & peak week", "peak / holiday week"}
 
     def _extract_all_days(ws_h):
-        """Handle two layouts:
-        - OLD: 'Regular Week' / 'Holiday Week' side-by-side (same rows, different columns)
-        - NEW: 'Non-Peak Pricing' / 'Holiday/Peak Pricing' stacked vertically (column C)
+        """Handle three layouts:
+        - TIMESLOT: oldest (2022-2024) — 'Monday - Thursday'/'Friday'/'Saturday & Sunday'
+          as column headers, rows are check-in time slots (datetime.time objects)
+        - OLD side-by-side: 'Regular Week' / 'Holiday Week' column-group headers
+        - NEW vertical: 'Non-Peak Pricing' / 'Holiday/Peak Pricing' stacked down col C
         """
         np_days, pk_days = {}, {}
         debug_rows = []
         all_rows = list(ws_h.iter_rows(values_only=True))
 
+        # ── Detect TIMESLOT format ────────────────────────────────────────────
+        MON_THU_HDRS = {"monday - thursday", "monday-thursday", "monday–thursday"}
+        FRI_HDRS_OLD = {"friday"}
+        SAT_SUN_HDRS = {"saturday & sunday", "saturday and sunday", "sat & sun"}
+
+        mth_col = fri_col = sat_col = None
+        for row in all_rows[:40]:
+            for ci, val in enumerate(row):
+                sv = str(val).strip().lower() if val is not None else ""
+                if sv in MON_THU_HDRS:
+                    mth_col = ci
+                if sv in FRI_HDRS_OLD and mth_col is not None and fri_col is None:
+                    fri_col = ci
+                if sv in SAT_SUN_HDRS and mth_col is not None and sat_col is None:
+                    sat_col = ci
+
+        if mth_col is not None:
+            debug_rows.append(f"TIMESLOT-format: Mon-Thu col={mth_col}, Fri col={fri_col}, Sat col={sat_col}")
+            mth_prices, fri_prices, sat_prices = [], [], []
+            for row in all_rows:
+                # Timeslot data rows have a datetime.time value in the first few columns
+                has_time = any(
+                    hasattr(row[i], "hour")
+                    for i in range(min(5, len(row)))
+                    if row[i] is not None
+                )
+                if not has_time:
+                    continue
+                if mth_col < len(row):
+                    v = _to_num(row[mth_col])
+                    if v is not None: mth_prices.append(v)
+                if fri_col is not None and fri_col < len(row):
+                    v = _to_num(row[fri_col])
+                    if v is not None: fri_prices.append(v)
+                if sat_col is not None and sat_col < len(row):
+                    v = _to_num(row[sat_col])
+                    if v is not None: sat_prices.append(v)
+
+            mth_p = round(statistics.median(mth_prices), 2) if mth_prices else None
+            fri_p = round(statistics.median(fri_prices), 2) if fri_prices else None
+            sat_p = round(statistics.median(sat_prices), 2) if sat_prices else None
+            debug_rows.append(f"  samples mth={mth_prices[:4]} → {mth_p}")
+            debug_rows.append(f"  samples fri={fri_prices[:4]} → {fri_p}")
+            debug_rows.append(f"  samples sat={sat_prices[:4]} → {sat_p}")
+
+            # Old sheets have no Select/Premier split — store under Select 3hr only
+            day_map = {
+                "Mon": mth_p, "Tue": mth_p, "Wed": mth_p, "Thu": mth_p,
+                "Fri": fri_p, "Sat": sat_p, "Sun": sat_p,
+            }
+            for day, price in day_map.items():
+                if price is not None:
+                    np_days[day] = {"Select 3hr": price, "Select All-Day": None,
+                                    "Premier 3hr": None, "Premier All-Day": None}
+            return np_days, pk_days, debug_rows
+
         # ── Detect OLD side-by-side format ────────────────────────────────────
-        np_lc = pk_lc = None   # label column index for each section
+        np_lc = pk_lc = None
         for row in all_rows[:20]:
             for ci, val in enumerate(row):
                 sv = str(val).strip().lower() if val is not None else ""
@@ -348,7 +407,6 @@ def load_imhs():
                 break
 
         if np_lc is not None or pk_lc is not None:
-            # Side-by-side: each row has a day in label column, data in next 4 cols
             for row in all_rows:
                 for lc, dest, label in [(np_lc, np_days, "NP"), (pk_lc, pk_days, "PK")]:
                     if lc is None or lc >= len(row):
