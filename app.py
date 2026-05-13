@@ -305,43 +305,42 @@ def load_imhs():
     NON_PRICING = {"2015 - Present DAy", "breif discritpion of pricing",
                    "brief discritpion of pricing", "brief description of pricing"}
 
-    def _extract_pricing(ws_h):
-        """Return (np_row_data, pk_row_data) as dicts, or None for each if not found."""
+    DAY_SET = set(DAY_ORDER)
+    NP_MARKERS = {"non-peak pricing", "non peak pricing"}
+    PK_MARKERS = {"holiday/peak pricing", "peak pricing", "holiday pricing",
+                  "peak/holiday pricing", "holiday / peak pricing"}
+
+    def _extract_all_days(ws_h):
+        """Return (np_days, pk_days) — dicts of {day: {Select 3hr, ...}} for all found days."""
         sec = None
-        label_col = None
-        np_data = pk_data = None
-        NP_MARKERS = {"non-peak pricing", "non peak pricing"}
-        PK_MARKERS = {"holiday/peak pricing", "peak pricing", "holiday pricing", "peak/holiday pricing"}
+        np_days, pk_days = {}, {}
         for row in ws_h.iter_rows(values_only=True):
-            for ci, val in enumerate(row):
+            # Scan every cell for section marker
+            found_marker = False
+            for val in row:
                 sv = str(val).strip().lower() if val is not None else ""
                 if sv in NP_MARKERS:
-                    sec = "non_peak"; label_col = ci; break
+                    sec = "non_peak"; found_marker = True; break
                 elif sv in PK_MARKERS:
-                    sec = "peak"; label_col = ci; break
-            else:
-                # No section marker — check if this row has a day label in label_col
-                if sec and label_col is not None and label_col < len(row):
-                    day = row[label_col]
-                    if day == "Mon" and sec == "non_peak" and np_data is None:
-                        try:
-                            c = label_col + 1
-                            if row[c] is not None:
-                                np_data = {"Select 3hr": row[c], "Select All-Day": row[c+1],
-                                           "Premier 3hr": row[c+2], "Premier All-Day": row[c+3]}
-                        except Exception:
-                            pass
-                    elif day == "Sat" and sec == "peak" and pk_data is None:
-                        try:
-                            c = label_col + 1
-                            if row[c] is not None:
-                                pk_data = {"Select 3hr": row[c], "Select All-Day": row[c+1],
-                                           "Premier 3hr": row[c+2], "Premier All-Day": row[c+3]}
-                        except Exception:
-                            pass
-            if np_data and pk_data:
-                break
-        return np_data, pk_data
+                    sec = "peak"; found_marker = True; break
+            if found_marker or sec is None:
+                continue
+            # Find a day label in any column, read 4 values to its right
+            for ci, val in enumerate(row):
+                if val in DAY_SET:
+                    try:
+                        v1, v2, v3, v4 = row[ci+1], row[ci+2], row[ci+3], row[ci+4]
+                        if isinstance(v1, (int, float)) and v1 is not None:
+                            entry = {"Select 3hr": v1, "Select All-Day": v2,
+                                     "Premier 3hr": v3, "Premier All-Day": v4}
+                            if sec == "non_peak" and val not in np_days:
+                                np_days[val] = entry
+                            elif sec == "peak" and val not in pk_days:
+                                pk_days[val] = entry
+                    except Exception:
+                        pass
+                    break
+        return np_days, pk_days
 
     pricing_sheets_ordered = []
     for idx, sname in enumerate(wb.sheetnames):
@@ -349,7 +348,7 @@ def load_imhs():
             continue
         ts = _try_parse_start(sname)
         if ts is pd.NaT:
-            continue  # skip sheets whose name can't be parsed as a date range
+            continue
         pricing_sheets_ordered.append((ts, idx, sname))
     pricing_sheets_ordered.sort(key=lambda x: x[0])
 
@@ -358,11 +357,14 @@ def load_imhs():
         mo, da, yr = ts.month, ts.day, ts.year
         label    = f"{mo}.{da}.{str(yr)[2:]}"
         date_str = f"{mo}.{da}.{yr}"
-        np_data, pk_data = _extract_pricing(wb[sname])
-        if np_data:
-            hist_records.append({"Period": label, "Date": date_str, "Type": "Non-Peak Mon", **np_data})
-        if pk_data:
-            hist_records.append({"Period": label, "Date": date_str, "Type": "Peak Sat", **pk_data})
+        np_days, pk_days = _extract_all_days(wb[sname])
+        for day in DAY_ORDER:
+            if day in np_days:
+                hist_records.append({"Period": label, "Date": date_str,
+                                     "Type": "Non-Peak", "Day": day, **np_days[day]})
+            if day in pk_days:
+                hist_records.append({"Period": label, "Date": date_str,
+                                     "Type": "Peak", "Day": day, **pk_days[day]})
 
     ws_yoy = wb["2015 - Present DAy"]
     adult_peak_row = None
@@ -378,11 +380,11 @@ def load_imhs():
                     "Select 3hr": val, "Select All-Day": val, "Premier 3hr": None, "Premier All-Day": None})
 
     # Build debug report
-    periods_found = sorted(set(r["Period"] for r in hist_records if r["Type"] == "Non-Peak Mon"))
+    periods_found = sorted(set(r["Period"] for r in hist_records if r["Type"] == "Non-Peak"))
     debug_lines = [
         f"**Pricing sheets found:** {len(pricing_sheets_ordered)}",
-        f"**Non-Peak Mon records:** {sum(1 for r in hist_records if r['Type']=='Non-Peak Mon')}",
-        f"**Peak Sat records:** {sum(1 for r in hist_records if r['Type']=='Peak Sat')}",
+        f"**Non-Peak records:** {sum(1 for r in hist_records if r['Type']=='Non-Peak')}",
+        f"**Peak records:** {sum(1 for r in hist_records if r['Type']=='Peak')}",
         f"**Periods:** {periods_found}",
         "", "**All workbook sheets:**"
     ]
@@ -904,7 +906,7 @@ elif "IMHS" in page:
     with tab3:
         st.markdown(f"<div style='font-size:16px;font-weight:600;color:{light};margin-bottom:12px'>Price History — 2022 to Present</div>", unsafe_allow_html=True)
 
-        if not imhs_hist.empty:
+        if not imhs_hist.empty and "Day" in imhs_hist.columns:
             def _parse_dt(s):
                 try:
                     p = s.strip().split(".")
@@ -912,88 +914,103 @@ elif "IMHS" in page:
                 except Exception:
                     return pd.NaT
 
-            metrics_imhs = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
-            colors_imhs4 = ["#A7F3D0", "#4ADE80", "#22C55E", "#15803D"]
-            end_ts = pd.Timestamp("2026-05-31")
+            metrics_imhs  = ["Select 3hr", "Select All-Day", "Premier 3hr", "Premier All-Day"]
+            colors_np     = ["#A7F3D0", "#4ADE80", "#22C55E", "#15803D"]   # green shades = Non-Peak
+            colors_pk     = ["#FCA5A5", "#F87171", "#EF4444", "#B91C1C"]   # red shades  = Peak
+            end_ts        = pd.Timestamp("2026-05-31")
 
-            # Build dated dataframes for each day type
-            def _make_dated(type_name):
-                df = imhs_hist[imhs_hist["Type"] == type_name].copy()
-                df["Date_ts"] = df["Date"].apply(_parse_dt)
-                df = df.dropna(subset=["Date_ts"]).sort_values("Date_ts").reset_index(drop=True)
-                if df.empty:
-                    return df
-                last = df.iloc[-1].copy()
-                last["Period"] = "5.31.26"
-                last["Date_ts"] = end_ts
-                return pd.concat([df, pd.DataFrame([last])], ignore_index=True)
-
-            np_ext = _make_dated("Non-Peak Mon")
-            pk_ext = _make_dated("Peak Sat")
+            df_h = imhs_hist[imhs_hist["Type"].isin(["Non-Peak", "Peak"])].copy()
+            df_h["Date_ts"] = df_h["Date"].apply(_parse_dt)
+            df_h = df_h.dropna(subset=["Date_ts"]).sort_values("Date_ts")
 
             st.markdown("""<style>
             div[data-testid="stRadio"] label {color:#FFFFFF !important; font-weight:600}
             div[data-testid="stRadio"] label p {color:#FFFFFF !important}
             </style>""", unsafe_allow_html=True)
 
-            col_left, col_right = st.columns([1, 2])
-            with col_left:
-                day_sel = st.radio("Day type", ["Non-Peak Mon", "Peak Sat"], horizontal=True)
-            with col_right:
+            col_l, col_r = st.columns([1, 2])
+            with col_l:
+                day_sel = st.radio("Day of week", DAY_ORDER, horizontal=True)
+            with col_r:
                 prod_sel = st.multiselect("Products", metrics_imhs, default=metrics_imhs)
 
-            df_trend = (np_ext if day_sel == "Non-Peak Mon" else pk_ext).copy()
+            df_day = df_h[df_h["Day"] == day_sel].copy()
 
-            # ── Trendline ─────────────────────────────────────────────────────
+            # Extend last period to 5.31.26 for both types
+            def _extend(df_type):
+                df = df_day[df_day["Type"] == df_type].sort_values("Date_ts")
+                if df.empty:
+                    return df
+                last = df.iloc[-1].copy()
+                last["Period"] = "5.31.26"; last["Date_ts"] = end_ts
+                return pd.concat([df, pd.DataFrame([last])], ignore_index=True)
+
+            np_df = _extend("Non-Peak")
+            pk_df = _extend("Peak")
+
+            # ── Trendline: Non-Peak (green) vs Peak (red) ─────────────────────
             fig_trend = go.Figure()
-            for metric, col in zip(metrics_imhs, colors_imhs4):
+            for metric, cnp, cpk in zip(metrics_imhs, colors_np, colors_pk):
                 if metric not in prod_sel:
                     continue
-                df_m = df_trend.dropna(subset=[metric])
-                if df_m.empty:
-                    continue
-                fig_trend.add_trace(go.Scatter(
-                    x=df_m["Date_ts"], y=df_m[metric],
-                    name=metric, mode="lines+markers",
-                    line=dict(color=col, width=2.5),
-                    marker=dict(size=8, color=col),
-                    hovertemplate=f"<b>{metric}</b><br>%{{x|%b %Y}}: $%{{y}}<extra></extra>"
-                ))
+                for df_t, col, label_sfx in [(np_df, cnp, "Non-Peak"), (pk_df, cpk, "Peak")]:
+                    df_m = df_t.dropna(subset=[metric])
+                    if df_m.empty:
+                        continue
+                    fig_trend.add_trace(go.Scatter(
+                        x=df_m["Date_ts"], y=df_m[metric],
+                        name=f"{metric} ({label_sfx})",
+                        mode="lines+markers",
+                        line=dict(color=col, width=2.5,
+                                  dash="dot" if label_sfx == "Peak" else "solid"),
+                        marker=dict(size=8, color=col),
+                        hovertemplate=f"<b>{metric} – {label_sfx}</b><br>%{{x|%b %Y}}: $%{{y}}<extra></extra>"
+                    ))
             layout_t = base_chart()
-            layout_t.update(height=420,
+            layout_t.update(height=440,
                 xaxis=dict(tickformat="%b %Y", tickfont=dict(color="#FFFFFF", size=11)),
                 yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
-                legend=dict(font=dict(color="#FFFFFF", size=11)),
-                title=dict(text=f"Price Trend — {day_sel}", font=dict(color="#FFFFFF", size=14), x=0.5),
+                legend=dict(font=dict(color="#FFFFFF", size=10)),
+                title=dict(text=f"Price Trend — {day_sel}  (solid = Non-Peak · dotted = Peak)",
+                           font=dict(color="#FFFFFF", size=13), x=0.5),
             )
             fig_trend.update_layout(**layout_t)
             st.plotly_chart(fig_trend, use_container_width=True)
 
             # ── Scrollable table ──────────────────────────────────────────────
-            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price Table by Period</div>", unsafe_allow_html=True)
-            # sort by Date_ts BEFORE dropping columns
-            tbl = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")
-            tbl = tbl[["Period", "Date"] + metrics_imhs].copy()
-            for m in metrics_imhs:
-                tbl[m] = tbl[m].apply(lambda v: f"${v:.0f}" if pd.notna(v) else "—")
-            st.dataframe(tbl.set_index("Period"), use_container_width=True, height=300)
+            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price Table — {day_sel}</div>", unsafe_allow_html=True)
+            tbl_rows = []
+            for df_t, type_lbl in [(np_df, "Non-Peak"), (pk_df, "Peak")]:
+                df_t2 = df_t[df_t["Period"] != "5.31.26"][["Period","Date"] + metrics_imhs].copy()
+                df_t2.insert(0, "Type", type_lbl)
+                tbl_rows.append(df_t2)
+            if tbl_rows:
+                tbl = pd.concat(tbl_rows).sort_values(["Date", "Type"])
+                for m in metrics_imhs:
+                    tbl[m] = tbl[m].apply(lambda v: f"${v:.0f}" if pd.notna(v) else "—")
+                st.dataframe(tbl.set_index("Period"), use_container_width=True, height=300)
 
             # ── Bar chart per period ───────────────────────────────────────────
-            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — All Products</div>", unsafe_allow_html=True)
-            df_b = df_trend[df_trend["Period"] != "5.31.26"].sort_values("Date_ts")
-            fig_bar = go.Figure()
-            for metric, col in zip(metrics_imhs, colors_imhs4):
-                fig_bar.add_trace(go.Bar(
-                    name=metric, x=df_b["Period"], y=df_b[metric],
-                    marker_color=col,
-                    text=df_b[metric].apply(lambda v: f"${v:.0f}" if pd.notna(v) else ""),
-                    textposition="outside", textfont=dict(color="#FFFFFF", size=10)
-                ))
+            st.markdown(f"<div style='font-size:14px;font-weight:600;color:{light};margin:20px 0 8px'>Price by Period — {day_sel}</div>", unsafe_allow_html=True)
+            from plotly.subplots import make_subplots
+            fig_bar = make_subplots(rows=1, cols=2,
+                subplot_titles=["Non-Peak", "Peak"],
+                shared_yaxes=True)
+            for col_idx, (df_t, cols_t) in enumerate([(np_df, colors_np), (pk_df, colors_pk)], 1):
+                df_b = df_t[df_t["Period"] != "5.31.26"].sort_values("Date_ts")
+                for metric, col in zip(metrics_imhs, cols_t):
+                    fig_bar.add_trace(go.Bar(
+                        name=metric, x=df_b["Period"], y=df_b[metric],
+                        marker_color=col, showlegend=(col_idx == 1),
+                        text=df_b[metric].apply(lambda v: f"${v:.0f}" if pd.notna(v) else ""),
+                        textposition="outside", textfont=dict(color="#FFFFFF", size=9)
+                    ), row=1, col=col_idx)
             layout_b = base_chart()
             layout_b.update(barmode="group", height=450, bargap=0.15, bargroupgap=0.05,
-                xaxis=dict(tickfont=dict(color="#FFFFFF", size=10), tickangle=-30),
+                xaxis=dict(tickfont=dict(color="#FFFFFF", size=9), tickangle=-30),
+                xaxis2=dict(tickfont=dict(color="#FFFFFF", size=9), tickangle=-30),
                 yaxis=dict(tickprefix="$", tickfont=dict(color="#FFFFFF", size=11)),
-                legend=dict(font=dict(color="#FFFFFF", size=11)),
+                legend=dict(font=dict(color="#FFFFFF", size=10)),
             )
             fig_bar.update_layout(**layout_b)
             st.plotly_chart(fig_bar, use_container_width=True)
