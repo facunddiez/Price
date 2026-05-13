@@ -299,55 +299,70 @@ def load_imhs():
         except Exception:
             return pd.NaT
 
-    # Scan ALL sheets by CONTENT: any sheet with "Non-Peak Pricing" is a pricing sheet.
-    # Sort by parsed start date when possible, otherwise preserve sheet order.
-    NON_PRICING = {"2015 - Present DAy"}
-    content_sheets = []
-    for idx, sname in enumerate(wb.sheetnames):
-        if sname in NON_PRICING:
-            continue
-        ws_h = wb[sname]
-        sec = None
-        added_np = False
-        added_pk = False
-        np_row = pk_row = None
-        for row in ws_h.iter_rows(values_only=True):
-            lbl = row[2] if len(row) > 2 else None
-            if lbl == "Non-Peak Pricing":
-                sec = "non_peak"
-            elif lbl == "Holiday/Peak Pricing":
-                sec = "peak"
-            elif lbl == "Mon" and sec == "non_peak" and not added_np and len(row) > 6 and row[3] is not None:
-                np_row = row; added_np = True
-            elif lbl == "Sat" and sec == "peak" and not added_pk and len(row) > 6 and row[3] is not None:
-                pk_row = row; added_pk = True
-            if added_np and added_pk:
-                break
-        if np_row is None and pk_row is None:
-            continue  # not a pricing sheet
-        ts = _try_parse_start(sname)
-        content_sheets.append((ts, idx, sname, np_row, pk_row))
+    # Identify pricing sheets by name (skip known non-pricing sheets).
+    # Use column-agnostic content parsing: find section markers in ANY column,
+    # then read the 4 data values immediately to the right of the day label.
+    NON_PRICING = {"2015 - Present DAy", "breif discritpion of pricing",
+                   "brief discritpion of pricing", "brief description of pricing"}
 
-    # Sort: parseable dates first (chronological), unparseable by sheet order
-    content_sheets.sort(key=lambda x: (x[0] is pd.NaT, x[0] if x[0] is not pd.NaT else pd.Timestamp("2099-01-01"), x[1]))
+    def _extract_pricing(ws_h):
+        """Return (np_row_data, pk_row_data) as dicts, or None for each if not found."""
+        sec = None
+        label_col = None
+        np_data = pk_data = None
+        NP_MARKERS = {"non-peak pricing", "non peak pricing"}
+        PK_MARKERS = {"holiday/peak pricing", "peak pricing", "holiday pricing", "peak/holiday pricing"}
+        for row in ws_h.iter_rows(values_only=True):
+            for ci, val in enumerate(row):
+                sv = str(val).strip().lower() if val is not None else ""
+                if sv in NP_MARKERS:
+                    sec = "non_peak"; label_col = ci; break
+                elif sv in PK_MARKERS:
+                    sec = "peak"; label_col = ci; break
+            else:
+                # No section marker — check if this row has a day label in label_col
+                if sec and label_col is not None and label_col < len(row):
+                    day = row[label_col]
+                    if day == "Mon" and sec == "non_peak" and np_data is None:
+                        try:
+                            c = label_col + 1
+                            if row[c] is not None:
+                                np_data = {"Select 3hr": row[c], "Select All-Day": row[c+1],
+                                           "Premier 3hr": row[c+2], "Premier All-Day": row[c+3]}
+                        except Exception:
+                            pass
+                    elif day == "Sat" and sec == "peak" and pk_data is None:
+                        try:
+                            c = label_col + 1
+                            if row[c] is not None:
+                                pk_data = {"Select 3hr": row[c], "Select All-Day": row[c+1],
+                                           "Premier 3hr": row[c+2], "Premier All-Day": row[c+3]}
+                        except Exception:
+                            pass
+            if np_data and pk_data:
+                break
+        return np_data, pk_data
+
+    pricing_sheets_ordered = []
+    for idx, sname in enumerate(wb.sheetnames):
+        if sname.strip().lower() in {s.lower() for s in NON_PRICING}:
+            continue
+        ts = _try_parse_start(sname)
+        if ts is pd.NaT:
+            continue  # skip sheets whose name can't be parsed as a date range
+        pricing_sheets_ordered.append((ts, idx, sname))
+    pricing_sheets_ordered.sort(key=lambda x: x[0])
 
     hist_records = []
-    for ts, idx, sname, np_row, pk_row in content_sheets:
-        if ts is pd.NaT:
-            label    = sname
-            date_str = sname
-        else:
-            mo, da, yr = ts.month, ts.day, ts.year
-            label    = f"{mo}.{da}.{str(yr)[2:]}"
-            date_str = f"{mo}.{da}.{yr}"
-        if np_row is not None:
-            hist_records.append({"Period": label, "Date": date_str, "Type": "Non-Peak Mon",
-                "Select 3hr": np_row[3], "Select All-Day": np_row[4],
-                "Premier 3hr": np_row[5], "Premier All-Day": np_row[6]})
-        if pk_row is not None:
-            hist_records.append({"Period": label, "Date": date_str, "Type": "Peak Sat",
-                "Select 3hr": pk_row[3], "Select All-Day": pk_row[4],
-                "Premier 3hr": pk_row[5], "Premier All-Day": pk_row[6]})
+    for ts, idx, sname in pricing_sheets_ordered:
+        mo, da, yr = ts.month, ts.day, ts.year
+        label    = f"{mo}.{da}.{str(yr)[2:]}"
+        date_str = f"{mo}.{da}.{yr}"
+        np_data, pk_data = _extract_pricing(wb[sname])
+        if np_data:
+            hist_records.append({"Period": label, "Date": date_str, "Type": "Non-Peak Mon", **np_data})
+        if pk_data:
+            hist_records.append({"Period": label, "Date": date_str, "Type": "Peak Sat", **pk_data})
 
     ws_yoy = wb["2015 - Present DAy"]
     adult_peak_row = None
@@ -362,14 +377,19 @@ def load_imhs():
                 hist_records.append({"Period": yr, "Date": f"6.1.{yr}", "Type": "Peak (Legacy Adult)",
                     "Select 3hr": val, "Select All-Day": val, "Premier 3hr": None, "Premier All-Day": None})
 
-    # Build debug report: all sheets + what was found
-    debug_lines = ["**All sheets in workbook:**"]
+    # Build debug report
+    periods_found = sorted(set(r["Period"] for r in hist_records if r["Type"] == "Non-Peak Mon"))
+    debug_lines = [
+        f"**Pricing sheets found:** {len(pricing_sheets_ordered)}",
+        f"**Non-Peak Mon records:** {sum(1 for r in hist_records if r['Type']=='Non-Peak Mon')}",
+        f"**Peak Sat records:** {sum(1 for r in hist_records if r['Type']=='Peak Sat')}",
+        f"**Periods:** {periods_found}",
+        "", "**All workbook sheets:**"
+    ]
     for sname in wb.sheetnames:
-        detected = any(r["Period"] == (_try_parse_start(sname) and f"{_try_parse_start(sname).month}.{_try_parse_start(sname).day}.{str(_try_parse_start(sname).year)[2:]}") for r in hist_records) if hist_records else False
-        found_np = any(r["Period"] and r["Type"] == "Non-Peak Mon" for r in hist_records if r.get("Date", "").replace(".", "") in sname.replace(".", "").replace(" ", "").replace("-", ""))
-        debug_lines.append(f"- `{sname}`")
-    debug_lines.append(f"\n**Total pricing records found:** {len(hist_records)}")
-    debug_lines.append(f"**Periods detected:** {sorted(set(r['Period'] for r in hist_records))}")
+        ts = _try_parse_start(sname)
+        status = f"✅ parsed as {ts.date()}" if ts is not pd.NaT else "⚠️ skipped (name not parsed)"
+        debug_lines.append(f"- `{sname}` — {status}")
 
     return non_peak, peak, pd.DataFrame(hist_records), "\n".join(debug_lines)
 
