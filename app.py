@@ -197,23 +197,23 @@ def chart_layout(fig, _loc: str, height: int = 420):
     fig.update_layout(
         plot_bgcolor="rgba(0,0,0,0)",
         paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#94A3B8", family="Inter"),
+        font=dict(color="#FFFFFF", family="Inter"),
         height=height,
         legend=dict(
             orientation="h", y=-0.22,
             bgcolor="rgba(0,0,0,0)",
-            font=dict(color="#94A3B8", size=12),
+            font=dict(color="#FFFFFF", size=12),
         ),
         yaxis=dict(
             title="Price (USD)",
             gridcolor="#1E2D3D",
-            tickfont=dict(color="#64748B"),
-            titlefont=dict(color="#64748B"),
+            tickfont=dict(color="#FFFFFF"),
+            titlefont=dict(color="#FFFFFF"),
             zeroline=False,
         ),
         xaxis=dict(
-            tickfont=dict(color="#64748B"),
-            titlefont=dict(color="#64748B"),
+            tickfont=dict(color="#FFFFFF"),
+            titlefont=dict(color="#FFFFFF"),
         ),
         margin=dict(t=20, b=60, l=10, r=10),
     )
@@ -406,10 +406,11 @@ with st.sidebar:
 def base_chart():
     return dict(
         plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="#94A3B8", family="Inter"),
-        legend=dict(orientation="h", y=-0.22, bgcolor="rgba(0,0,0,0)", font=dict(size=12)),
-        yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#64748B"), zeroline=False, title="Price (USD)"),
-        xaxis=dict(tickfont=dict(color="#94A3B8")),
+        font=dict(color="#FFFFFF", family="Inter"),
+        legend=dict(orientation="h", y=-0.22, bgcolor="rgba(0,0,0,0)", font=dict(color="#FFFFFF", size=12)),
+        yaxis=dict(gridcolor="#1E2D3D", tickfont=dict(color="#FFFFFF"), zeroline=False, title="Price (USD)",
+                   titlefont=dict(color="#FFFFFF")),
+        xaxis=dict(tickfont=dict(color="#FFFFFF")),
         margin=dict(t=20, b=60, l=10, r=10),
     )
 
@@ -507,7 +508,7 @@ if "Overview" in page:
 
     layout = base_chart()
     layout.update(barmode="group", height=360,
-        xaxis=dict(tickfont=dict(color="#94A3B8", size=13)),
+        xaxis=dict(tickfont=dict(color="#FFFFFF", size=13)),
         bargap=0.3, bargroupgap=0.08)
     fig.update_layout(**layout)
     st.plotly_chart(fig, use_container_width=True)
@@ -562,11 +563,11 @@ elif "WSD" in page:
         fig = go.Figure()
         fig.add_trace(go.Bar(name="Day Pass", x=days_full, y=day_pass_by_day,
             marker_color=colors_day, text=[f"${v}" for v in day_pass_by_day],
-            textposition="outside", textfont=dict(color="#94A3B8")))
+            textposition="outside", textfont=dict(color="#FFFFFF")))
         fig.add_trace(go.Bar(name="Evening Pass", x=days_full, y=evening_by_day,
             marker_color=[c + "99" for c in colors_day],
             text=[f"${v}" for v in evening_by_day],
-            textposition="outside", textfont=dict(color="#64748B")))
+            textposition="outside", textfont=dict(color="#FFFFFF")))
 
         layout = base_chart()
         layout.update(barmode="group", height=400,
@@ -737,7 +738,7 @@ elif "ZCHS" in page:
 
             layout = base_chart()
             layout.update(barmode="group", height=430, bargap=0.25, bargroupgap=0.08,
-                xaxis=dict(tickfont=dict(color="#94A3B8", size=11), tickangle=-20))
+                xaxis=dict(tickfont=dict(color="#FFFFFF", size=11), tickangle=-20))
             fig.update_layout(**layout)
             st.plotly_chart(fig, use_container_width=True)
 
