@@ -175,7 +175,8 @@ def price_table(data: dict, title: str, loc: str, subtitle: str = ""):
         cols = ""
         for v in prices.values():
             if isinstance(v, (int, float)):
-                cols += f"<td style='padding:9px 16px;text-align:center;font-weight:600;color:#F8FAFC;font-size:15px'>${v}</td>"
+                display = int(v) if isinstance(v, float) and v == int(v) else v
+                cols += f"<td style='padding:9px 16px;text-align:center;font-weight:600;color:#F8FAFC;font-size:15px'>${display}</td>"
             else:
                 cols += f"<td style='padding:9px 16px;text-align:center;color:#64748B;font-size:13px'>{v if v else '—'}</td>"
         rows_html += f"<tr style='background:{bg}'><td style='padding:9px 16px;font-weight:500;color:#CBD5E1;font-size:13px'>{product}</td>{cols}</tr>"
@@ -567,7 +568,7 @@ if "Overview" in page:
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns([1, 1.9, 1.5])
 
     with col1:
         wsd_p = C["WSD"]["p"]; wsd_d = C["WSD"]["dark"]
