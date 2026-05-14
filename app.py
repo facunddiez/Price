@@ -533,8 +533,8 @@ def load_zchs():
 with st.sidebar:
     st.markdown("""
     <div style='padding: 20px 8px 8px 8px;'>
-        <div style='font-size:22px;font-weight:700;color:#F8FAFC;letter-spacing:-0.5px'>♨️ Worldsprings</div>
-        <div style='font-size:12px;color:#475569;margin-top:4px'>Pricing Dashboard</div>
+        <div style='font-size:22px;font-weight:700;color:#F8FAFC;letter-spacing:-0.5px'>🏊 2026 Price</div>
+        <div style='font-size:22px;font-weight:700;color:#F8FAFC;letter-spacing:-0.5px'>Dashboard</div>
     </div>
     """, unsafe_allow_html=True)
 
