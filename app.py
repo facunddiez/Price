@@ -71,9 +71,12 @@ st.markdown("""
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #090D13 0%, #0D1117 100%);
     border-right: 1px solid #1E2D3D;
+    min-width: 168px !important;
+    max-width: 168px !important;
+    width: 168px !important;
 }
 [data-testid="stSidebar"] * { color: #94A3B8 !important; }
-[data-testid="stSidebar"] .stRadio label { font-size: 14px !important; }
+[data-testid="stSidebar"] .stRadio label { font-size: 13px !important; }
 
 /* Radio buttons in sidebar */
 [data-testid="stSidebar"] [data-testid="stWidgetLabel"] { display: none; }
@@ -159,13 +162,18 @@ def section_card(content_html: str, loc: str):
     """, unsafe_allow_html=True)
 
 
-def price_table(data: dict, title: str, loc: str, subtitle: str = ""):
+def price_table(data: dict, title: str, loc: str, subtitle: str = "", compact: bool = False):
     p = C[loc]["p"]
     light = C[loc]["light"]
     dark = C[loc]["dark"]
+    hp = "5px 7px" if compact else "8px 16px"
+    cp = "6px 7px" if compact else "9px 16px"
+    hfs = "11px" if compact else "12px"
+    vfs = "12px" if compact else "15px"
+    lfs = "11px" if compact else "13px"
 
     header_cols = "".join(
-        f"<th style='padding:8px 16px;background:{dark}55;color:{light};font-weight:600;font-size:12px;letter-spacing:0.5px;text-align:center'>{h}</th>"
+        f"<th style='padding:{hp};background:{dark}55;color:{light};font-weight:600;font-size:{hfs};letter-spacing:0.3px;text-align:center'>{h}</th>"
         for h in next(iter(data.values())).keys()
     )
 
@@ -176,10 +184,10 @@ def price_table(data: dict, title: str, loc: str, subtitle: str = ""):
         for v in prices.values():
             if isinstance(v, (int, float)):
                 display = int(v) if isinstance(v, float) and v == int(v) else v
-                cols += f"<td style='padding:9px 16px;text-align:center;font-weight:600;color:#F8FAFC;font-size:15px'>${display}</td>"
+                cols += f"<td style='padding:{cp};text-align:center;font-weight:600;color:#F8FAFC;font-size:{vfs}'>${display}</td>"
             else:
-                cols += f"<td style='padding:9px 16px;text-align:center;color:#64748B;font-size:13px'>{v if v else '—'}</td>"
-        rows_html += f"<tr style='background:{bg}'><td style='padding:9px 16px;font-weight:500;color:#CBD5E1;font-size:13px'>{product}</td>{cols}</tr>"
+                cols += f"<td style='padding:{cp};text-align:center;color:#64748B;font-size:{lfs}'>{v if v else '—'}</td>"
+        rows_html += f"<tr style='background:{bg}'><td style='padding:{cp};font-weight:500;color:#CBD5E1;font-size:{lfs}'>{product}</td>{cols}</tr>"
 
     sub = f"<div style='font-size:12px;color:#64748B;margin-top:2px'>{subtitle}</div>" if subtitle else ""
     table = f"""
@@ -568,7 +576,7 @@ if "Overview" in page:
     </div>
     """, unsafe_allow_html=True)
 
-    col1, col2, col3 = st.columns([1, 1.9, 1.5])
+    col1, col2, col3 = st.columns([1, 1.7, 1.3])
 
     with col1:
         wsd_p = C["WSD"]["p"]; wsd_d = C["WSD"]["dark"]
@@ -577,7 +585,7 @@ if "Overview" in page:
             <span style='font-size:11px;font-weight:700;color:{wsd_p};text-transform:uppercase;letter-spacing:1.5px'>WSD</span>
             <span style='font-size:15px;font-weight:700;color:#F8FAFC;margin-left:10px'>Dallas, TX</span>
         </div>""", unsafe_allow_html=True)
-        price_table(wsd_current, "Soak Admission", "WSD")
+        price_table(wsd_current, "Soak Admission", "WSD", compact=True)
         simple_table([("1-Month Trial","$125"),("Weekday Annual","$948/yr"),("Anytime Annual","$1,788/yr")], "Memberships", "WSD")
         simple_table([("Robe Rental","$10"),("Cabana Mon-Thu","$199"),("Cabana Sat","$299")], "Add-ons", "WSD")
 
@@ -593,13 +601,13 @@ if "Overview" in page:
                     "Pre 3hr": imhs_non_peak.get(d,{}).get("Premier 3hr"),
                     "Pre All-Day": imhs_non_peak.get(d,{}).get("Premier All-Day")}
                 for d in DAY_ORDER if d in imhs_non_peak}
-        price_table(np_t, "Non-Peak Pricing", "IMHS")
+        price_table(np_t, "Non-Peak Pricing", "IMHS", compact=True)
         pk_t = {d: {"Sel 3hr": imhs_peak.get(d,{}).get("Select 3hr"),
                     "Sel All-Day": imhs_peak.get(d,{}).get("Select All-Day"),
                     "Pre 3hr": imhs_peak.get(d,{}).get("Premier 3hr"),
                     "Pre All-Day": imhs_peak.get(d,{}).get("Premier All-Day")}
                 for d in DAY_ORDER if d in imhs_peak}
-        price_table(pk_t, "Peak / Holiday Pricing", "IMHS")
+        price_table(pk_t, "Peak / Holiday Pricing", "IMHS", compact=True)
 
     with col3:
         zchs_p = C["ZCHS"]["p"]; zchs_d = C["ZCHS"]["dark"]
@@ -610,7 +618,7 @@ if "Overview" in page:
         </div>""", unsafe_allow_html=True)
         if zchs_current:
             disp = {pr: {k: v if isinstance(v,(int,float)) else "—" for k,v in prc.items()} for pr,prc in zchs_current.items()}
-            price_table(disp, "Soak Pricing (May 2026)", "ZCHS")
+            price_table(disp, "Soak Pricing (May 2026)", "ZCHS", compact=True)
         simple_table([("Anytime Annual","$1,499"),("Weekday Annual","$920"),("Snowbird (3 mo)","$499")], "Memberships", "ZCHS")
         simple_table([("Single Cabana Mon-Thu","$149"),("Single Cabana Fri-Sun","$249"),
                       ("Double Cabana Mon-Thu","$199"),("Double Cabana Fri-Sun","$299")], "Add-ons", "ZCHS")
